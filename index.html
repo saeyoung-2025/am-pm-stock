@@ -117,6 +117,17 @@
   .night small{font-size:12px;color:var(--sub)}
   .night i{margin-left:auto;font-family:Georgia,serif;font-size:13px;color:var(--faint);white-space:nowrap}
 
+  .topline{display:flex;align-items:center;gap:7px;margin:0 0 16px;white-space:nowrap}
+  .topline .date{font-size:17px;margin:0}
+  .topline .date small{font-size:12px;margin-left:3px}
+  .topline .status{margin:0;padding:3px 9px;font-size:11.5px}
+  .topline .tag-delay{display:inline;margin:0;font-size:10.5px}
+  .topline .upd{margin-left:auto;font-size:11px;color:var(--sub)}
+  .round{flex:none;width:32px;height:32px;padding:0;border-radius:50% !important;background:#34a853;
+         font-size:17px;line-height:32px;text-align:center;box-shadow:0 3px 8px -2px rgba(52,168,83,.55)}
+  .round[hidden]{display:none}
+  .upd[hidden]{display:none}
+
   footer{text-align:center;font-size:12px;line-height:1.7;color:var(--faint);margin-top:26px}
   footer a{color:var(--faint)}
 </style>
@@ -130,17 +141,16 @@
 
 <div class="hero"><img id="heroImg" src="hero-am.jpg" alt="미국장의 흔적을 살피고, 한국장의 아침을 준비합니다. MORNING MARKET"></div>
 
-<header>
-  <div class="date" id="date"></div>
-  <div class="status" id="status"></div>
-  <span class="tag-delay">지연 데이터 / 참고용</span>
+<header class="topline">
+  <span class="date" id="date"></span>
+  <span class="status" id="status"></span>
+  <span class="tag-delay">지연·참고용</span>
+  <span class="upd" id="updated">–</span><span class="upd" id="cbUpdated" hidden>–</span>
+  <button class="round" id="refresh" title="새로고침" aria-label="새로고침">↻</button>
+  <button class="round" id="cbRefresh" title="지금 확인" aria-label="지금 확인" hidden>↻</button>
 </header>
 
 <div class="panel" id="p-morning">
-<div class="bar">
-  <span id="updated">불러오는 중…</span>
-  <button id="refresh">새로고침 ↻</button>
-</div>
 
 <main id="board"></main>
 
@@ -151,10 +161,6 @@
 
 <div class="panel" id="p-closing" hidden>
   <div class="cb-time" id="cbTime"></div>
-  <div class="bar">
-    <span id="cbUpdated">아직 확인 전</span>
-    <button id="cbRefresh">지금 확인 ↻</button>
-  </div>
   <div id="cbBody"></div>
   <section>
     <div class="card legend">
@@ -224,15 +230,15 @@ function kstParts(){
 function renderHeader(){
   const p = kstParts();
   const wd = ["일","월","화","수","목","금","토"][p.wd];
-  document.getElementById("date").innerHTML = `${p.y}.${pad(p.m)}.${pad(p.day)}<small>${wd}요일</small>`;
+  document.getElementById("date").innerHTML = `${p.y}.${pad(p.m)}.${pad(p.day)}<small>${wd}</small>`;
   const t = p.h*60 + p.mi;
   let s;
   const ymd = `${p.y}-${pad(p.m)}-${pad(p.day)}`;
-  if (p.wd===0 || p.wd===6) s = ["😴","주말 · 한국장 휴장"];
-  else if (KRX_HOLIDAYS.includes(ymd)) s = ["🎑","공휴일 · 한국장 휴장"];
-  else if (t < 540)         s = ["🌤️","한국장 개장 전"];
-  else if (t < 930)         s = ["🔔","한국장 거래 중"];
-  else                      s = ["🌙","한국장 마감"];
+  if (p.wd===0 || p.wd===6) s = ["😴","주말 휴장"];
+  else if (KRX_HOLIDAYS.includes(ymd)) s = ["🎑","공휴일 휴장"];
+  else if (t < 540)         s = ["🌤️","개장 전"];
+  else if (t < 930)         s = ["🔔","거래 중"];
+  else                      s = ["🌙","장 마감"];
   document.getElementById("status").innerHTML = `<i>${s[0]}</i>${s[1]}`;
 }
 
@@ -295,7 +301,7 @@ function renderBoard(){
     board.appendChild(s);
   });
   const p = kstParts();
-  document.getElementById("updated").textContent = `마지막 업데이트 ${pad(p.h)}:${pad(p.mi)} KST`;
+  document.getElementById("updated").textContent = `${pad(p.h)}:${pad(p.mi)} 기준`;
 }
 
 function renderNote(){
@@ -319,6 +325,8 @@ document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click
   document.getElementById("p-morning").hidden = currentTab !== "morning";
   document.getElementById("p-closing").hidden = currentTab !== "closing";
   const am = currentTab === "morning";
+  ["updated","refresh"].forEach(id => document.getElementById(id).hidden = !am);
+  ["cbUpdated","cbRefresh"].forEach(id => document.getElementById(id).hidden = am);
   const hero = document.getElementById("heroImg");
   hero.src = am ? "hero-am.jpg" : "hero-pm.jpg";
   hero.alt = am ? "미국장의 흔적을 살피고, 한국장의 아침을 준비합니다. MORNING MARKET"
@@ -368,7 +376,7 @@ async function loadClosing(){
     return;
   }
   const p = kstParts();
-  document.getElementById("cbUpdated").textContent = `확인 ${pad(p.h)}:${pad(p.mi)} KST`;
+  document.getElementById("cbUpdated").textContent = `${pad(p.h)}:${pad(p.mi)} 기준`;
 
   if (j.status === "not_configured"){
     cbEmpty("🔌", "KIS 연결 대기 중<br>한국투자증권 키를 발급받아 Vercel에 넣으면<br>이 화면이 자동으로 켜집니다.");
