@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#fffbe8">
+<title>MORNING MARKET</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#fffbe8; --card:#ffffff; --line:#d6e2f5;
+    --text:#1f3f7a; --sub:#4d6a9e; --faint:#8a9fc4;
+    --up:#e0504a; --down:#1f6fe0; --accent:#3b6fd1; --chip:#e3ecfb;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{background:#e9edf5}
+  body{background:var(--bg);color:var(--text);font-family:"Gowun Dodum",system-ui,sans-serif;
+       max-width:480px;min-height:100vh;margin:0 auto;padding:22px 16px 40px;-webkit-font-smoothing:antialiased;
+       box-shadow:0 0 0 1px rgba(31,63,122,.06),0 12px 40px rgba(31,63,122,.18)}
+  @media (max-width:520px){ html{background:var(--bg)} body{box-shadow:none} }
+
+  header{text-align:center;margin-bottom:18px}
+  .logo{font-family:Nunito,sans-serif;font-weight:800;font-size:15px;letter-spacing:.18em;color:var(--accent)}
+  .logo span{display:inline-block;animation:bob 3s ease-in-out infinite}
+  @keyframes bob{50%{transform:translateY(-3px)}}
+  .tagline{text-align:center;font-size:12px;color:var(--sub);margin:-8px 0 16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .date{font-family:Nunito,sans-serif;font-weight:800;font-size:28px;margin-top:2px}
+  .date small{font-family:"Gowun Dodum";font-weight:400;font-size:16px;color:var(--sub);margin-left:6px}
+  .status{display:inline-block;margin-top:10px;padding:6px 16px;border-radius:99px;
+          background:var(--chip);font-size:13px;color:var(--text)}
+  .status i{font-style:normal;margin-right:4px}
+  .tag-delay{display:block;margin-top:10px;font-size:12px;color:var(--faint)}
+
+  section{margin-bottom:18px}
+  h2{font-size:14px;font-weight:400;color:var(--sub);margin:0 0 8px 6px}
+  .card{background:var(--card);border-radius:14px;padding:6px 6px;border:1px solid #eef2f9;
+        box-shadow:0 2px 4px rgba(31,63,122,.08),0 10px 24px -6px rgba(31,63,122,.22)}
+  .row{display:flex;align-items:center;border-bottom:1px dashed var(--line);min-height:52px}
+  .row:last-child{border-bottom:none}
+  .row .name{width:112px;flex:none;padding-left:12px;word-break:keep-all}
+  .row .name b{display:block;font-weight:400;font-size:15px}
+  .row .name em{font-style:normal;font-size:10.5px;color:var(--faint)}
+  .row .tv{flex:1;min-width:0;padding:2px 0;zoom:.58}  /* 위젯 전체를 약 58% 크기로 */
+
+  /* MSCI 월간 카드 */
+  .msci-card{display:flex;align-items:center;padding:6px}
+  .msci-card .name{width:112px;flex:none;padding-left:10px}
+  .msci-card .name b{display:block;font-weight:700;font-size:15px}
+  .msci-card .name em{font-style:normal;font-size:10.5px;color:var(--faint)}
+  .msci{padding:10px 16px}
+  .msci .val{font-family:Nunito,sans-serif;font-weight:800;font-size:22px}
+  .msci .meta{font-size:12px;color:var(--sub);margin-top:2px}
+  .msci .more{font-size:12px;color:var(--faint);margin-top:6px}
+  .up{color:var(--up)} .down{color:var(--down)} .none{color:var(--faint);font-size:15px;font-family:"Gowun Dodum"}
+
+  .bar{display:flex;justify-content:space-between;align-items:center;margin:6px 4px 22px;font-size:12px;color:var(--sub)}
+  button{font-family:inherit;font-size:13px;color:#fff;background:var(--accent);border:none;
+         border-radius:99px;padding:9px 18px;cursor:pointer;box-shadow:0 4px 10px -3px rgba(59,111,209,.5)}
+
+  /* 오늘의 메모 */
+  .note{padding:14px 16px}
+  .note .head{font-size:13px;color:var(--accent);margin-bottom:6px}
+  .note .head small{color:var(--faint);font-size:11px;margin-left:6px}
+  .note p{font-size:15px;line-height:1.6}
+  .note .warn{font-size:11px;color:var(--faint);margin-top:8px}
+  button:active{transform:scale(.96)}
+
+  /* 히어로 이미지 */
+  .hero{margin:0 -16px 14px;line-height:0}
+  .hero img{width:100%;height:auto;display:block}
+  .tabs button{border-radius:0 !important}
+  .tabs button img{width:22px;height:22px;border-radius:5px;vertical-align:-5px;margin-right:4px;opacity:.55}
+  .tabs button.on img{opacity:1}
+
+  /* 2열 카드 */
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .mini{background:var(--card);border-radius:14px;height:148px;overflow:hidden;padding:2px 2px 0;
+        border:1px solid #eef2f9;box-shadow:0 2px 4px rgba(31,63,122,.06),0 8px 18px -6px rgba(31,63,122,.18)}
+  .mini .tag{display:block;font-size:10.5px;color:var(--faint);padding:6px 10px 0}
+  .mini .tv{height:124px}
+  .wide{grid-column:1 / -1}
+  h2{font-size:15px;font-weight:700;color:var(--text);margin:0 0 10px 4px}
+
+  /* 탭 */
+  .tabs{display:flex;margin:-22px -16px 0;border-bottom:1px solid var(--line);background:rgba(255,255,255,.55)}
+  .tabs button{flex:1;background:none;box-shadow:none;color:var(--faint);font-size:14px;padding:13px 0 11px;
+               border-bottom:3px solid transparent}
+  .tabs button.on{color:var(--accent);border-bottom-color:var(--accent)}
+  .tabs button:active{transform:none}
+  .panel[hidden]{display:none}
+
+  /* 종가베팅 */
+  .cb-time{text-align:center;font-size:13px;color:var(--sub);margin:-8px 0 16px}
+  .cb-time b{color:var(--accent);font-weight:400}
+  .banner{padding:12px 16px;margin-bottom:16px;font-size:14px;line-height:1.55}
+  .banner.stop{border-left:4px solid var(--up)}
+  .banner.ok{border-left:4px solid #5aa469}
+  .cand{display:flex;align-items:center;gap:10px;padding:12px 10px;border-bottom:1px dashed var(--line)}
+  .cand:last-child{border-bottom:none}
+  .dot{flex:none;width:12px;height:12px;border-radius:50%}
+  .dot.green{background:#5aa469} .dot.yellow{background:#f0b429} .dot.red{background:var(--up)} .dot.gray{background:#c5cedd}
+  .cand .nm{flex:1;min-width:0}
+  .cand .nm b{display:block;font-weight:400;font-size:15px}
+  .cand .nm em{display:block;font-style:normal;font-size:11px;color:var(--faint);margin-top:2px}
+  .cand .px{text-align:right;font-family:Nunito,sans-serif;font-weight:800;font-size:15px}
+  .cand .px small{display:block;font-weight:600;font-size:12px}
+  .legend{font-size:11.5px;color:var(--sub);line-height:1.8;padding:12px 16px}
+  .empty{padding:22px 16px;text-align:center;font-size:14px;color:var(--sub);line-height:1.7}
+  .empty b{display:block;font-size:22px;margin-bottom:4px}
+
+  .night{display:flex;align-items:center;gap:14px;padding:16px 18px;background:#eef1fb}
+  .night b{font-size:28px;font-weight:400}
+  .night p{font-size:15px}
+  .night small{font-size:12px;color:var(--sub)}
+  .night i{margin-left:auto;font-family:Georgia,serif;font-size:13px;color:var(--faint);white-space:nowrap}
+
+  footer{text-align:center;font-size:12px;line-height:1.7;color:var(--faint);margin-top:26px}
+  footer a{color:var(--faint)}
+</style>
+</head>
+<body>
+
+<nav class="tabs">
+  <button data-tab="morning" class="on"><img src="icon-am.png" alt=""> 아침 계기판</button>
+  <button data-tab="closing"><img src="icon-pm.png" alt=""> 저녁 계기판</button>
+</nav>
+
+<div class="hero"><img id="heroImg" src="hero-am.jpg" alt="미국장의 흔적을 살피고, 한국장의 아침을 준비합니다. MORNING MARKET"></div>
+
+<header>
+  <div class="date" id="date"></div>
+  <div class="status" id="status"></div>
+  <span class="tag-delay">지연 데이터 / 참고용</span>
+</header>
+
+<div class="panel" id="p-morning">
+<div class="bar">
+  <span id="updated">불러오는 중…</span>
+  <button id="refresh">새로고침 ↻</button>
+</div>
+
+<main id="board"></main>
+
+<section>
+  <div class="card note" id="note"></div>
+</section>
+</div>
+
+<div class="panel" id="p-closing" hidden>
+  <div class="cb-time" id="cbTime"></div>
+  <div class="bar">
+    <span id="cbUpdated">아직 확인 전</span>
+    <button id="cbRefresh">지금 확인 ↻</button>
+  </div>
+  <div id="cbBody"></div>
+  <section>
+    <div class="card legend">
+      🟢 관심 — −5~−15% 하락 · 거래량 1.5~5배 · 20일선 근처<br>
+      🟡 주의 — 거래량 약함/과열, 20일선 크게 이탈<br>
+      🔴 제외 — −15% 넘는 급락, 투자경고·주의 종목<br>
+      ⚪ 참고 — −3~−5% 하락 (아직 후보 아님)<br>
+      <span style="color:var(--faint)">매수·매도 권유가 아닌 선별 참고용입니다. 판단은 본인 몫입니다.</span>
+    </div>
+  </section>
+  <section>
+    <div class="card night">
+      <b>🌙</b>
+      <div><p>오늘도 수고했어요.</p><small>내일의 좋은 기회는, 오늘의 기록에서 시작됩니다.</small></div>
+      <i>Good Night ♡</i>
+    </div>
+  </section>
+</div>
+
+<footer>
+  데이터는 제공처에 따라 지연될 수 있습니다.<br>투자 판단의 참고자료로만 사용하세요.<br>
+  시세 위젯: <a href="https://www.tradingview.com/" target="_blank" rel="noopener">TradingView</a> ·
+  월간: <a href="https://www.msci.com/indexes/index/941000" target="_blank" rel="noopener">MSCI</a>
+</footer>
+
+<script src="msci.js"></script>
+<script src="note.js"></script>
+<script>
+/* ── 지표 목록: 심볼이 안 뜨면 여기 sym만 바꾸면 됩니다 ── */
+const BOARD = [
+  { title:"⭐ 미국장", items:[
+    { name:"S&P 500",    note:"CFD · 참고",   sym:"FOREXCOM:SPXUSD" },
+    { name:"Nasdaq 100", note:"CFD · 참고",   sym:"FOREXCOM:NSXUSD" },
+    { name:"Dow",        note:"CFD · 참고",   sym:"FOREXCOM:DJI" },
+    { name:"VIX",        note:"CFD · 참고",   sym:"CAPITALCOM:VIX" },
+  ]},
+  { title:"🌙 선물 (24시간)", items:[
+    { name:"S&P 24h",     note:"CFD · 선물 대용", sym:"OANDA:SPX500USD" },
+    { name:"Nasdaq 24h",  note:"CFD · 선물 대용", sym:"OANDA:NAS100USD" },
+  ]},
+  { title:"🐯 한국 관련", items:[
+    { name:"EWY",     note:"ETF · 약 15분 지연", sym:"AMEX:EWY" },
+    { name:"USD/KRW", note:"환율",              sym:"FX_IDC:USDKRW" },
+    { msci:true },
+  ]},
+  { title:"🌎 원자재 · 기타 지표", items:[
+    { name:"DXY",  note:"달러지수 CFD", sym:"CAPITALCOM:DXY" },
+    { name:"Gold", note:"금",       sym:"OANDA:XAUUSD" },
+    { name:"WTI",  note:"원유",     sym:"TVC:USOIL" },
+  ]},
+];
+
+/* 한국장 휴장일 (매년 초 갱신) */
+const KRX_HOLIDAYS = [
+  "2026-01-01","2026-02-16","2026-02-17","2026-02-18","2026-03-02","2026-05-01","2026-05-05",
+  "2026-05-25","2026-06-03","2026-08-17","2026-09-24","2026-09-25","2026-10-05","2026-10-09",
+  "2026-12-25","2026-12-31"
+];
+const KST = { timeZone:"Asia/Seoul" };
+const pad = n => String(n).padStart(2,"0");
+
+function kstParts(){
+  const d = new Date(new Date().toLocaleString("en-US", KST));
+  return { d, y:d.getFullYear(), m:d.getMonth()+1, day:d.getDate(), wd:d.getDay(), h:d.getHours(), mi:d.getMinutes() };
+}
+
+function renderHeader(){
+  const p = kstParts();
+  const wd = ["일","월","화","수","목","금","토"][p.wd];
+  document.getElementById("date").innerHTML = `${p.y}.${pad(p.m)}.${pad(p.day)}<small>${wd}요일</small>`;
+  const t = p.h*60 + p.mi;
+  let s;
+  const ymd = `${p.y}-${pad(p.m)}-${pad(p.day)}`;
+  if (p.wd===0 || p.wd===6) s = ["😴","주말 · 한국장 휴장"];
+  else if (KRX_HOLIDAYS.includes(ymd)) s = ["🎑","공휴일 · 한국장 휴장"];
+  else if (t < 540)         s = ["🌤️","한국장 개장 전"];
+  else if (t < 930)         s = ["🔔","한국장 거래 중"];
+  else                      s = ["🌙","한국장 마감"];
+  document.getElementById("status").innerHTML = `<i>${s[0]}</i>${s[1]}`;
+}
+
+function tvWidget(el, sym){
+  el.innerHTML = "";
+  const box = document.createElement("div");
+  box.className = "tradingview-widget-container";
+  box.innerHTML = '<div class="tradingview-widget-container__widget"></div>';
+  const sc = document.createElement("script");
+  sc.src = "https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js";
+  sc.async = true;
+  sc.innerHTML = JSON.stringify({
+    symbol:sym, width:"100%", height:"100%", locale:"kr", dateRange:"1D", colorTheme:"light",
+    isTransparent:true, autosize:true, noTimeScale:true, chartOnly:false,
+    trendLineColor:"rgba(59,111,209,1)", underLineColor:"rgba(59,111,209,0.18)", underLineBottomColor:"rgba(59,111,209,0)"
+  });
+  box.appendChild(sc);
+  el.appendChild(box);
+}
+
+function msciRow(){
+  const m = window.MSCI;
+  const wrap = document.createElement("div");
+  wrap.className = "card wide msci-card";
+  if (!m || typeof m.m1 !== "number"){
+    wrap.innerHTML = `<div class="name"><b>MSCI Korea</b><em>월간</em></div><div class="msci"><div class="val none">데이터 없음</div></div>`;
+    return wrap;
+  }
+  const cls = v => v>=0 ? "up" : "down";
+  const fmt = v => (v>=0?"+":"") + v.toFixed(2) + "%";
+  const asOf = new Date(m.asOf + "T00:00:00+09:00");
+  const stale = (Date.now() - asOf) / 864e5 > 40;
+  wrap.innerHTML = `
+    <div class="name"><b>MSCI Korea</b><em>월간 · 1개월</em></div>
+    <div class="msci">
+      <div class="val ${cls(m.m1)}">${fmt(m.m1)}</div>
+      <div class="meta">기준 ${m.asOf.replace(/-/g,".")}${stale ? " · 갱신 필요" : ""}</div>
+      <div class="more">3개월 <span class="${cls(m.m3)}">${fmt(m.m3)}</span> · 연초 대비 <span class="${cls(m.ytd)}">${fmt(m.ytd)}</span></div>
+    </div>`;
+  return wrap;
+}
+
+function renderBoard(){
+  const board = document.getElementById("board");
+  board.innerHTML = "";
+  BOARD.forEach(sec => {
+    const s = document.createElement("section");
+    s.innerHTML = `<h2>${sec.title}</h2>`;
+    const card = document.createElement("div");
+    card.className = "grid";
+    sec.items.forEach(it => {
+      if (it.msci){ card.appendChild(msciRow()); return; }
+      const box = document.createElement("div");
+      box.className = "mini";
+      box.innerHTML = `<span class="tag">${it.name} · ${it.note}</span><div class="tv"></div>`;
+      card.appendChild(box);
+      tvWidget(box.querySelector(".tv"), it.sym);
+    });
+    s.appendChild(card);
+    board.appendChild(s);
+  });
+  const p = kstParts();
+  document.getElementById("updated").textContent = `마지막 업데이트 ${pad(p.h)}:${pad(p.mi)} KST`;
+}
+
+function renderNote(){
+  const n = window.NOTE, el = document.getElementById("note");
+  const p = kstParts();
+  const today = `${p.y}-${pad(p.m)}-${pad(p.day)}`;
+  const ok = n && n.text && n.date === today;
+  el.innerHTML = `
+    <div class="head">📝 오늘의 메모${ok ? `<small>${n.time} 작성</small>` : ""}</div>
+    <p${ok ? "" : ' class="none"'}>${ok ? n.text : "메모 없음"}</p>
+    <div class="warn">시장 분위기 참고용 메모이며 매수·매도 권유가 아닙니다. 판단은 본인 몫입니다.</div>`;
+}
+
+function refresh(){ renderHeader(); renderBoard(); renderNote(); }
+
+/* ── 탭 ── */
+let currentTab = "morning";
+document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click", () => {
+  currentTab = b.dataset.tab;
+  document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b));
+  document.getElementById("p-morning").hidden = currentTab !== "morning";
+  document.getElementById("p-closing").hidden = currentTab !== "closing";
+  const am = currentTab === "morning";
+  const hero = document.getElementById("heroImg");
+  hero.src = am ? "hero-am.jpg" : "hero-pm.jpg";
+  hero.alt = am ? "미국장의 흔적을 살피고, 한국장의 아침을 준비합니다. MORNING MARKET"
+                : "오늘의 장 마감 흔적을 보고, 내일을 준비하는 작은 계기판. EVENING MARKET";
+  if (currentTab === "closing") { renderCbTime(); if (!cbLoaded) loadClosing(); }
+}));
+
+/* ── 종가베팅 ── */
+let cbLoaded = false;
+const esc = t => String(t).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pct = v => v === null || v === undefined ? "–" : (v > 0 ? "+" : "") + v.toFixed(2) + "%";
+
+function renderCbTime(){
+  const p = kstParts(), t = p.h*60 + p.mi;
+  const ymd = `${p.y}-${pad(p.m)}-${pad(p.day)}`;
+  const closed = p.wd===0 || p.wd===6 || KRX_HOLIDAYS.includes(ymd);
+  let msg;
+  if (closed) msg = "오늘은 휴장일입니다";
+  else if (t < 840) msg = "종가베팅 시간은 <b>14:00 ~ 15:20</b> 입니다";
+  else if (t < 920) msg = "🎯 <b>지금 종가베팅 시간</b> (15:20까지)";
+  else msg = "오늘 종가베팅 시간이 지났습니다";
+  document.getElementById("cbTime").innerHTML = msg;
+}
+
+function cbEmpty(icon, text){
+  document.getElementById("cbBody").innerHTML =
+    `<section><div class="card empty"><b>${icon}</b>${text}</div></section>`;
+}
+
+function getPass(){ try { return localStorage.getItem("mm_pass") || ""; } catch(e){ return ""; } }
+function setPass(v){ try { localStorage.setItem("mm_pass", v); } catch(e){} }
+
+async function loadClosing(){
+  cbLoaded = true;
+  renderCbTime();
+  if (location.protocol === "file:"){
+    cbEmpty("🔌", "KIS 연결 대기 중<br>배포 후 한국투자증권 키를 넣으면 작동합니다.");
+    return;
+  }
+  cbEmpty("⏳", "우량주를 확인하는 중… (10초 정도)");
+  let j;
+  try {
+    const r = await fetch("/api/closing", { headers: { "x-app-password": getPass() } });
+    j = await r.json();
+  } catch(e){
+    cbEmpty("🔌", "KIS 연결 대기 중<br>서버에 연결할 수 없습니다.");
+    return;
+  }
+  const p = kstParts();
+  document.getElementById("cbUpdated").textContent = `확인 ${pad(p.h)}:${pad(p.mi)} KST`;
+
+  if (j.status === "not_configured"){
+    cbEmpty("🔌", "KIS 연결 대기 중<br>한국투자증권 키를 발급받아 Vercel에 넣으면<br>이 화면이 자동으로 켜집니다.");
+    return;
+  }
+  if (j.status === "unauthorized"){
+    const v = prompt("앱 비밀번호를 입력하세요");
+    if (v){ setPass(v); cbLoaded = false; loadClosing(); }
+    else cbEmpty("🔒", "비밀번호가 필요합니다.");
+    return;
+  }
+  if (j.status !== "ok"){
+    cbEmpty("⚠️", "데이터를 가져오지 못했습니다<br><small>" + esc(j.message || "") + "</small><br>1분 뒤 다시 눌러 주세요.");
+    return;
+  }
+
+  let html = "";
+  if (j.market){
+    const stop = j.marketStop;
+    html += `<section><div class="card banner ${stop ? "stop" : "ok"}">
+      ${stop ? "🛑 <b>오늘은 쉬는 날 권장</b> — " : "✅ "}${esc(j.market.name)}
+      <span class="${j.market.change >= 0 ? "up" : "down"}">${pct(j.market.change)}</span>
+      ${stop ? "지수가 크게 빠진 날은 종가베팅에 불리합니다." : "지수 급락은 아닙니다."}
+    </div></section>`;
+  }
+  const c = j.candidates || [];
+  html += `<h2>우량주 ${j.scanned}/${j.total}개 중 −3% 이하 하락 ${c.length}개</h2>`;
+  if (!c.length){
+    html += `<section><div class="card empty"><b>🌿</b>크게 빠진 우량주가 없습니다.</div></section>`;
+  } else {
+    html += `<section><div class="card">` + c.map(q => `
+      <div class="cand">
+        <span class="dot ${q.signal}"></span>
+        <div class="nm"><b>${esc(q.name)}</b>
+          <em>거래량 ${q.volRatio != null ? q.volRatio + "배" : "–"} · 20일선 ${q.ma20Gap != null ? pct(q.ma20Gap) : "–"}${q.why && q.why.length ? " · " + esc(q.why.join(", ")) : ""}</em></div>
+        <div class="px">${q.price != null ? q.price.toLocaleString() : "데이터 없음"}
+          <small class="${q.change >= 0 ? "up" : "down"}">${pct(q.change)}</small></div>
+      </div>`).join("") + `</div></section>`;
+  }
+  document.getElementById("cbBody").innerHTML = html;
+}
+document.getElementById("cbRefresh").addEventListener("click", loadClosing);
+document.getElementById("refresh").addEventListener("click", refresh);
+refresh();
+</script>
+</body>
+</html>
