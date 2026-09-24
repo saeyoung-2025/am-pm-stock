@@ -26,6 +26,7 @@
   .logo{font-family:Nunito,sans-serif;font-weight:800;font-size:15px;letter-spacing:.18em;color:var(--accent)}
   .logo span{display:inline-block;animation:bob 3s ease-in-out infinite}
   @keyframes bob{50%{transform:translateY(-3px)}}
+  .tagline{font-size:12.5px;color:var(--sub);margin-top:6px;word-break:keep-all}
   .date{font-family:Nunito,sans-serif;font-weight:800;font-size:26px;margin-top:8px}
   .date small{font-family:"Gowun Dodum";font-weight:400;font-size:16px;color:var(--sub);margin-left:6px}
   .status{display:inline-block;margin-top:10px;padding:5px 14px;border-radius:0;
@@ -42,7 +43,7 @@
   .row .name{width:112px;flex:none;padding-left:12px;word-break:keep-all}
   .row .name b{display:block;font-weight:400;font-size:15px}
   .row .name em{font-style:normal;font-size:10.5px;color:var(--faint)}
-  .row .tv{flex:1;min-width:0;height:64px;overflow:hidden}
+  .row .tv{flex:1;min-width:0;padding:4px 0}
 
   /* MSCI 월간 카드 */
   .msci{padding:12px 16px}
@@ -64,14 +65,10 @@
   button:active{transform:scale(.96)}
 
   /* 탭 */
-  .tabs{display:flex;align-items:flex-end;margin:-22px -16px 22px;padding:12px 14px 0;background:#dfe7f5;
-         box-shadow:inset 0 -1px 0 rgba(31,63,122,.12)}
-  .tabs button{position:relative;flex:1;margin:0 -9px;padding:11px 0 9px;font-size:14px;color:var(--faint);
-               background:#eef2f9;box-shadow:none;
-               clip-path:polygon(16px 0,calc(100% - 16px) 0,100% 100%,0 100%)}
-  .tabs button:first-child{margin-left:0} .tabs button:last-child{margin-right:0}
-  .tabs button.on{z-index:2;color:var(--accent);background:var(--bg);padding-top:13px;
-                  filter:drop-shadow(0 -2px 3px rgba(31,63,122,.15))}
+  .tabs{display:flex;margin:-22px -16px 20px;border-bottom:1px solid var(--line);background:rgba(255,255,255,.55)}
+  .tabs button{flex:1;background:none;box-shadow:none;color:var(--faint);font-size:14px;padding:13px 0 11px;
+               border-bottom:3px solid transparent}
+  .tabs button.on{color:var(--accent);border-bottom-color:var(--accent)}
   .tabs button:active{transform:none}
   .panel[hidden]{display:none}
 
@@ -101,12 +98,13 @@
 <body>
 
 <nav class="tabs">
-  <button data-tab="morning" class="on">☕ 장전 계기판</button>
-  <button data-tab="closing">🎯 종가베팅</button>
+  <button data-tab="morning" class="on">🌅 장전 계기판</button>
+  <button data-tab="closing">🌇 종가 계기판</button>
 </nav>
 
 <header>
-  <div class="logo"><span>☕</span> MORNING MARKET</div>
+  <div class="logo"><span id="logoIcon">🌅</span> <b id="logoText" style="font-weight:800">MORNING MARKET</b></div>
+  <div class="tagline" id="tagline">미국장 흔적을 보고 한국장 아침을 준비하는 작은 계기판</div>
   <div class="date" id="date"></div>
   <div class="status" id="status"></div>
   <span class="tag-delay">지연 데이터 / 참고용</span>
@@ -154,23 +152,23 @@
 <script>
 /* ── 지표 목록: 심볼이 안 뜨면 여기 sym만 바꾸면 됩니다 ── */
 const BOARD = [
-  { title:"🇺🇸 미국장", items:[
+  { title:"🗽 미국장", items:[
     { name:"S&P 500",    note:"CFD · 참고",   sym:"FOREXCOM:SPXUSD" },
     { name:"Nasdaq 100", note:"CFD · 참고",   sym:"FOREXCOM:NSXUSD" },
     { name:"Dow",        note:"CFD · 참고",   sym:"FOREXCOM:DJI" },
     { name:"VIX",        note:"CFD · 참고",   sym:"CAPITALCOM:VIX" },
   ]},
-  { title:"📈 선물", items:[
-    { name:"S&P 선물",    note:"CME · 지연", sym:"CME_MINI:ES1!" },
-    { name:"Nasdaq 선물", note:"CME · 지연", sym:"CME_MINI:NQ1!" },
+  { title:"🌙 선물 (24시간)", items:[
+    { name:"S&P 24h",     note:"CFD · 선물 대용", sym:"OANDA:SPX500USD" },
+    { name:"Nasdaq 24h",  note:"CFD · 선물 대용", sym:"OANDA:NAS100USD" },
   ]},
-  { title:"🇰🇷 한국 관련", items:[
+  { title:"🐯 한국 관련", items:[
     { name:"EWY",     note:"ETF · 약 15분 지연", sym:"AMEX:EWY" },
     { msci:true },
     { name:"USD/KRW", note:"환율",              sym:"FX_IDC:USDKRW" },
   ]},
   { title:"🌎 주요 지표", items:[
-    { name:"DXY",  note:"달러지수", sym:"TVC:DXY" },
+    { name:"DXY",  note:"달러지수 CFD", sym:"CAPITALCOM:DXY" },
     { name:"Gold", note:"금",       sym:"OANDA:XAUUSD" },
     { name:"WTI",  note:"원유",     sym:"TVC:USOIL" },
   ]},
@@ -283,6 +281,12 @@ document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click
   document.querySelectorAll(".tabs button").forEach(x => x.classList.toggle("on", x === b));
   document.getElementById("p-morning").hidden = currentTab !== "morning";
   document.getElementById("p-closing").hidden = currentTab !== "closing";
+  const am = currentTab === "morning";
+  document.getElementById("logoIcon").textContent = am ? "🌅" : "🌇";
+  document.getElementById("logoText").textContent = am ? "MORNING MARKET" : "CLOSING MARKET";
+  document.getElementById("tagline").textContent = am
+    ? "미국장 흔적을 보고 한국장 아침을 준비하는 작은 계기판"
+    : "마감 직전 흐름을 보고 내일 아침을 준비하는 작은 종가 계기판";
   if (currentTab === "closing") { renderCbTime(); if (!cbLoaded) loadClosing(); }
 }));
 
