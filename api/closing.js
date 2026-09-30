@@ -40,7 +40,8 @@ async function getToken(key, secret) {
     body: JSON.stringify({ grant_type: "client_credentials", appkey: key, appsecret: secret }),
   });
   const j = await r.json();
-  if (!j.access_token) throw new Error("토큰 발급 실패: " + (j.error_description || j.msg1 || r.status));
+  if (!j.access_token) throw new Error("토큰 발급 실패: " + (j.error_description || j.msg1 || r.status)
+    + ` (키 ${key.length}자 · 시크릿 ${secret.length}자 / 정상: 36자 · 180자)`);
   tokenCache = { token: j.access_token, exp: Date.now() + 20 * 3600 * 1000 };
   return j.access_token;
 }
@@ -64,10 +65,13 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 module.exports = async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
-  const { KIS_APP_KEY: key, KIS_APP_SECRET: secret, APP_PASSWORD: pass } = process.env;
+  const clean = v => (v || "").replace(/^["'\s]+|["'\s]+$/g, "").replace(/\s+/g, "");
+  const key = clean(process.env.KIS_APP_KEY);
+  const secret = clean(process.env.KIS_APP_SECRET);
+  const pass = (process.env.APP_PASSWORD || "").trim();
 
   if (!key || !secret) return res.status(200).json({ status: "not_configured" });
-  if (pass && req.headers["x-app-password"] !== pass) return res.status(401).json({ status: "unauthorized" });
+  if (pass && (req.headers["x-app-password"] || "").trim() !== pass) return res.status(401).json({ status: "unauthorized" });
 
   try {
     const auth = { key, secret, token: await getToken(key, secret) };
