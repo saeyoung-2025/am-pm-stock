@@ -76,6 +76,51 @@ module.exports = async (req, res) => {
   try {
     const auth = { key, secret, token: await getToken(key, secret) };
 
+    const qv = k => (req.query && req.query[k]) ? String(req.query[k]) : "";
+
+    // ⭐ 일봉 30일: /api/closing?daily=005930
+    if (/^\d{6}$/.test(qv("daily"))) {
+      const d = await kis("/uapi/domestic-stock/v1/quotations/inquire-daily-price", "FHKST01010400",
+        { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: qv("daily"), FID_PERIOD_DIV_CODE: "D", FID_ORG_ADJ_PRC: "1" }, auth);
+      const rows = (d.output || []).map(x => ({ date: x.stck_bsop_date, open: num(x.stck_oprc), high: num(x.stck_hgpr),
+        low: num(x.stck_lwpr), close: num(x.stck_clpr), vol: num(x.acml_vol) }));
+      return res.status(200).json({ status: "ok", rows });
+    }
+
+    // ⭐ 투자자별 매매: /api/closing?investor=005930
+    if (/^\d{6}$/.test(qv("investor"))) {
+      const d = await kis("/uapi/domestic-stock/v1/quotations/inquire-investor", "FHKST01010900",
+        { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: qv("investor") }, auth);
+      const rows = (d.output || []).slice(0, 5).map(x => ({ date: x.stck_bsop_date,
+        person: num(x.prsn_ntby_qty), foreign: num(x.frgn_ntby_qty), inst: num(x.orgn_ntby_qty) }));
+      return res.status(200).json({ status: "ok", rows });
+    }
+
+    // ⭐ 관심종목 현재가: /api/closing?codes=005930,000660
+    if (qv("codes")) {
+      const codes = qv("codes").split(",").filter(c => /^\d{6}$/.test(c)).slice(0, 20);
+      const out = {}, errs = {};
+      const queue = [...codes];
+      const worker = async () => {
+        while (queue.length) {
+          const code = queue.shift();
+          for (let t = 0; t < 2; t++) {
+            try {
+              const o = (await kis("/uapi/domestic-stock/v1/quotations/inquire-price", "FHKST01010100",
+                { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: code }, auth)).output;
+              out[code] = { price: num(o.stck_prpr), change: num(o.prdy_ctrt), open: num(o.stck_oprc),
+                high: num(o.stck_hgpr), low: num(o.stck_lwpr), prev: num(o.stck_sdpr), vol: num(o.acml_vol),
+                w52low: num(o.w52_lwpr), w52high: num(o.w52_hgpr), foreign: num(o.frgn_ntby_qty) };
+              break;
+            } catch (e) { const m = String(e.message).slice(0, 60); errs[m] = (errs[m] || 0) + 1; await sleep(400); }
+          }
+          await sleep(180);
+        }
+      };
+      await Promise.all([worker(), worker()]);
+      return res.status(200).json({ status: "ok", quotes: out, errors: errs });
+    }
+
     // 1) 코스피 지수
     let market = null;
     try {
