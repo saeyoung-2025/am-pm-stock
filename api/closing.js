@@ -85,20 +85,22 @@ module.exports = async (req, res) => {
     } catch (e) { market = null; }
 
     // 2) 관심 우량주 현재가 (초당 호출 제한 때문에 8개씩 나눠서)
+    // 초당 호출 제한 때문에 한 종목씩 천천히, 실패하면 한 번 더
     const quotes = [];
-    for (let i = 0; i < UNIVERSE.length; i += 8) {
-      const batch = UNIVERSE.slice(i, i + 8);
-      const got = await Promise.all(batch.map(async ([code, name]) => {
+    for (const [code, name] of UNIVERSE) {
+      let item = { code, name, error: true };
+      for (let t = 0; t < 2; t++) {
         try {
           const q = await kis("/uapi/domestic-stock/v1/quotations/inquire-price", "FHKST01010100",
             { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: code }, auth);
           const o = q.output;
-          return { code, name, price: num(o.stck_prpr), change: num(o.prdy_ctrt), volume: num(o.acml_vol),
+          item = { code, name, price: num(o.stck_prpr), change: num(o.prdy_ctrt), volume: num(o.acml_vol),
                    warn: o.mrkt_warn_cls_code && o.mrkt_warn_cls_code !== "00" };
-        } catch (e) { return { code, name, error: true }; }
-      }));
-      quotes.push(...got);
-      await sleep(450);
+          break;
+        } catch (e) { await sleep(400); }
+      }
+      quotes.push(item);
+      await sleep(90);
     }
 
     // 3) 많이 빠진 종목만 일봉으로 20일선·평균거래량 확인
@@ -115,7 +117,7 @@ module.exports = async (req, res) => {
           q.volRatio = avgVol ? +(q.volume / avgVol).toFixed(2) : null;
         }
       } catch (e) { /* 일봉 실패 시 해당 값만 비움 */ }
-      await sleep(120);
+      await sleep(150);
     }
 
     // 4) 신호등
