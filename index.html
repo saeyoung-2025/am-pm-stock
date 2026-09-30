@@ -103,6 +103,9 @@
   .dot{flex:none;width:12px;height:12px;border-radius:50%}
   .dot.green{background:#5aa469} .dot.yellow{background:#f0b429} .dot.red{background:var(--up)} .dot.gray{background:#c5cedd}
   .cand .nm{flex:1;min-width:0}
+  .lnk{color:inherit;text-decoration:none}
+  .lnk:hover b{text-decoration:underline}
+  .errinfo{font-size:11px;color:var(--faint);margin:-4px 4px 10px;line-height:1.5}
   .cand .nm b{display:block;font-weight:400;font-size:15px}
   .cand .nm em{display:block;font-style:normal;font-size:11px;color:var(--faint);margin-top:2px}
   .cand .px{text-align:right;font-family:Nunito,sans-serif;font-weight:800;font-size:15px}
@@ -406,13 +409,15 @@ async function loadClosing(){
   }
   const c = j.candidates || [];
   html += `<h2>우량주 ${j.scanned}/${j.total}개 중 −3% 이하 하락 ${c.length}개</h2>`;
+  const ek = Object.keys(j.errors || {});
+  if (ek.length) html += `<p class="errinfo">조회 실패 사유: ${ek.map(k => esc(k) + " ×" + j.errors[k]).join(" / ")} · ${((j.ms||0)/1000).toFixed(1)}초</p>`;
   if (!c.length){
     html += `<section><div class="card empty"><b>🌿</b>크게 빠진 우량주가 없습니다.</div></section>`;
   } else {
     html += `<section><div class="card">` + c.map(q => `
       <div class="cand">
         <span class="dot ${q.signal}"></span>
-        <div class="nm"><b>${esc(q.name)}</b>
+        <div class="nm"><a class="lnk" href="https://m.stock.naver.com/domestic/stock/${esc(q.code)}/total" target="_blank" rel="noopener"><b>${esc(q.name)} ↗</b></a>
           <em>거래량 ${q.volRatio != null ? q.volRatio + "배" : "–"} · 20일선 ${q.ma20Gap != null ? pct(q.ma20Gap) : "–"}${q.why && q.why.length ? " · " + esc(q.why.join(", ")) : ""}</em></div>
         <div class="px">${q.price != null ? q.price.toLocaleString() : "데이터 없음"}
           <small class="${q.change >= 0 ? "up" : "down"}">${pct(q.change)}</small></div>
