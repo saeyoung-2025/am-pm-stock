@@ -84,28 +84,38 @@ module.exports = async (req, res) => {
       market = { name: "코스피", value: num(m.output.bstp_nmix_prpr), change: num(m.output.bstp_nmix_prdy_ctrt) };
     } catch (e) { market = null; }
 
-    // 2) 관심 우량주 현재가 (초당 호출 제한 때문에 8개씩 나눠서)
-    // 초당 호출 제한 때문에 한 종목씩 천천히, 실패하면 한 번 더
-    const quotes = [];
-    for (const [code, name] of UNIVERSE) {
-      let item = { code, name, error: true };
-      for (let t = 0; t < 2; t++) {
-        try {
-          const q = await kis("/uapi/domestic-stock/v1/quotations/inquire-price", "FHKST01010100",
-            { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: code }, auth);
-          const o = q.output;
-          item = { code, name, price: num(o.stck_prpr), change: num(o.prdy_ctrt), volume: num(o.acml_vol),
-                   warn: o.mrkt_warn_cls_code && o.mrkt_warn_cls_code !== "00" };
-          break;
-        } catch (e) { await sleep(400); }
+    // 2) 관심 우량주 현재가 — 3개씩 동시에, 시간 예산(6초) 안에서만
+    const t0 = Date.now();
+    const BUDGET = 6000;
+    const byCode = new Map(UNIVERSE.map(([code, name]) => [code, { code, name, error: true }]));
+    const getQuote = async (code) => {
+      const q = await kis("/uapi/domestic-stock/v1/quotations/inquire-price", "FHKST01010100",
+        { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: code }, auth);
+      const o = q.output, base = byCode.get(code);
+      byCode.set(code, { code, name: base.name, price: num(o.stck_prpr), change: num(o.prdy_ctrt),
+        volume: num(o.acml_vol), warn: !!(o.mrkt_warn_cls_code && o.mrkt_warn_cls_code !== "00") });
+    };
+    const queue = UNIVERSE.map(([code]) => code);
+    const retry = [];
+    const worker = async () => {
+      while (queue.length && Date.now() - t0 < BUDGET) {
+        const code = queue.shift();
+        try { await getQuote(code); } catch (e) { retry.push(code); }
+        await sleep(180);
       }
-      quotes.push(item);
-      await sleep(90);
+    };
+    await Promise.all([worker(), worker(), worker()]);
+    while (retry.length && Date.now() - t0 < BUDGET) {      // 실패한 종목 한 번 더
+      const code = retry.shift();
+      try { await getQuote(code); } catch (e) {}
+      await sleep(250);
     }
+    const quotes = [...byCode.values()];
 
-    // 3) 많이 빠진 종목만 일봉으로 20일선·평균거래량 확인
+    // 3) 많이 빠진 종목만 일봉으로 20일선·평균거래량 확인 (남은 시간 안에서)
     const dropped = quotes.filter(q => !q.error && q.change !== null && q.change <= RULE.scanDrop);
     for (const q of dropped) {
+      if (Date.now() - t0 > BUDGET + 2000) break;
       try {
         const d = await kis("/uapi/domestic-stock/v1/quotations/inquire-daily-price", "FHKST01010400",
           { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: q.code, FID_PERIOD_DIV_CODE: "D", FID_ORG_ADJ_PRC: "1" }, auth);
