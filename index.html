@@ -370,9 +370,11 @@ async function loadClosing(){
   let j;
   try {
     const r = await fetch("/api/closing", { headers: { "x-app-password": getPass() } });
-    j = await r.json();
+    const txt = await r.text();
+    try { j = JSON.parse(txt); }
+    catch(e){ cbEmpty("⚠️", `서버 응답 오류 (${r.status})<br>1분 뒤 다시 눌러 주세요.`); return; }
   } catch(e){
-    cbEmpty("🔌", "KIS 연결 대기 중<br>서버에 연결할 수 없습니다.");
+    cbEmpty("🔌", "서버에 연결할 수 없습니다.<br>인터넷 연결을 확인해 주세요.");
     return;
   }
   const p = kstParts();
