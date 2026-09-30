@@ -97,17 +97,19 @@ module.exports = async (req, res) => {
     };
     const queue = UNIVERSE.map(([code]) => code);
     const retry = [];
+    const errs = {};
+    const note = e => { const m = String(e.message || e).slice(0, 60); errs[m] = (errs[m] || 0) + 1; };
     const worker = async () => {
       while (queue.length && Date.now() - t0 < BUDGET) {
         const code = queue.shift();
-        try { await getQuote(code); } catch (e) { retry.push(code); }
+        try { await getQuote(code); } catch (e) { retry.push(code); note(e); }
         await sleep(180);
       }
     };
     await Promise.all([worker(), worker(), worker()]);
     while (retry.length && Date.now() - t0 < BUDGET) {      // 실패한 종목 한 번 더
       const code = retry.shift();
-      try { await getQuote(code); } catch (e) {}
+      try { await getQuote(code); } catch (e) { note(e); }
       await sleep(250);
     }
     const quotes = [...byCode.values()];
@@ -126,7 +128,7 @@ module.exports = async (req, res) => {
           q.ma20Gap = +(((q.price / ma20) - 1) * 100).toFixed(2);
           q.volRatio = avgVol ? +(q.volume / avgVol).toFixed(2) : null;
         }
-      } catch (e) { /* 일봉 실패 시 해당 값만 비움 */ }
+      } catch (e) { note(e); }
       await sleep(150);
     }
 
@@ -160,6 +162,8 @@ module.exports = async (req, res) => {
       total: UNIVERSE.length,
       candidates: dropped,
       rule: RULE,
+      errors: errs,
+      ms: Date.now() - t0,
     });
   } catch (e) {
     res.status(200).json({ status: "error", message: String(e.message || e) });
