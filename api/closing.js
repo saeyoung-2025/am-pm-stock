@@ -20,14 +20,15 @@ const UNIVERSE = [
   ["096770","SK이노베이션"],["247540","에코프로비엠"],["086520","에코프로"],["196170","알테오젠"],["028300","HLB"],
 ];
 
-// 선별 기준
+// 선별 기준 (0~4단계)
 const RULE = {
-  scanDrop: -3,     // 이 이하로 빠진 종목만 상세 확인
-  minDrop: -5,      // 후보 하한 (−5% 이하)
-  maxDrop: -15,     // 이보다 더 빠지면 제외 (급락 위험)
-  volGood: 1.5,     // 거래량 20일 평균 대비 1.5배 이상이면 좋음
-  volHot: 5,        // 5배 이상이면 과열 주의
-  marketStop: -1.5, // 코스피 −1.5% 이하면 '쉬는 날' 권장
+  marketStop: -1.5,   // 0단계: 코스피가 이 이하면 '쉬는 날'
+  dropMin: -2,        // 1단계: 오늘 −2% 이하로 빠졌고
+  dropMax: -7,        //        −7%보다는 덜 빠진 종목 (그보다 깊으면 '과대 급락'으로 제외)
+  minAmount: 200e8,   //        거래대금 200억 원 이상
+  recGood: 0.5,       // 2단계: 저점에서 빠진 폭의 50% 이상 회복하면 좋음
+  recWeak: 0.2,       //        20% 미만이면 '아직 저점 근처'
+  posGood: 0.5,       //        오늘 고가~저가 중 위쪽 절반에 있으면 좋음
 };
 
 let tokenCache = { token: null, exp: 0 };
@@ -121,94 +122,108 @@ module.exports = async (req, res) => {
       return res.status(200).json({ status: "ok", quotes: out, errors: errs });
     }
 
-    // 1) 코스피 지수
-    let market = null;
-    try {
-      const m = await kis("/uapi/domestic-stock/v1/quotations/inquire-index-price", "FHPUP02100000",
-        { FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: "0001" }, auth);
-      market = { name: "코스피", value: num(m.output.bstp_nmix_prpr), change: num(m.output.bstp_nmix_prdy_ctrt) };
-    } catch (e) { market = null; }
-
-    // 2) 관심 우량주 현재가 — 3개씩 동시에, 시간 예산(6초) 안에서만
     const t0 = Date.now();
-    const BUDGET = 6000;
-    const byCode = new Map(UNIVERSE.map(([code, name]) => [code, { code, name, error: true }]));
-    const getQuote = async (code) => {
-      const q = await kis("/uapi/domestic-stock/v1/quotations/inquire-price", "FHKST01010100",
-        { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: code }, auth);
-      const o = q.output, base = byCode.get(code);
-      byCode.set(code, { code, name: base.name, price: num(o.stck_prpr), change: num(o.prdy_ctrt),
-        volume: num(o.acml_vol), warn: !!(o.mrkt_warn_cls_code && o.mrkt_warn_cls_code !== "00") });
-    };
-    const queue = UNIVERSE.map(([code]) => code);
-    const retry = [];
     const errs = {};
     const note = e => { const m = String(e.message || e).slice(0, 60); errs[m] = (errs[m] || 0) + 1; };
-    const worker = async () => {
-      while (queue.length && Date.now() - t0 < BUDGET) {
-        const code = queue.shift();
-        try { await getQuote(code); } catch (e) { retry.push(code); note(e); }
-        await sleep(180);
-      }
-    };
-    await Promise.all([worker(), worker(), worker()]);
-    while (retry.length && Date.now() - t0 < BUDGET) {      // 실패한 종목 한 번 더
-      const code = retry.shift();
-      try { await getQuote(code); } catch (e) { note(e); }
-      await sleep(250);
-    }
-    const quotes = [...byCode.values()];
 
-    // 3) 많이 빠진 종목만 일봉으로 20일선·평균거래량 확인 (남은 시간 안에서)
-    const dropped = quotes.filter(q => !q.error && q.change !== null && q.change <= RULE.scanDrop);
-    for (const q of dropped) {
-      if (Date.now() - t0 > BUDGET + 2000) break;
+    // ── 0단계 · 시장 필터 ──
+    const idx = async (code, name) => {
       try {
-        const d = await kis("/uapi/domestic-stock/v1/quotations/inquire-daily-price", "FHKST01010400",
-          { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: q.code, FID_PERIOD_DIV_CODE: "D", FID_ORG_ADJ_PRC: "1" }, auth);
-        const past = (d.output || []).slice(1, 21); // 오늘 제외 최근 20거래일
-        if (past.length >= 10) {
-          const ma20 = past.reduce((s, x) => s + num(x.stck_clpr), 0) / past.length;
-          const avgVol = past.reduce((s, x) => s + num(x.acml_vol), 0) / past.length;
-          q.ma20Gap = +(((q.price / ma20) - 1) * 100).toFixed(2);
-          q.volRatio = avgVol ? +(q.volume / avgVol).toFixed(2) : null;
-        }
-      } catch (e) { note(e); }
-      await sleep(150);
-    }
+        const m = await kis("/uapi/domestic-stock/v1/quotations/inquire-index-price", "FHPUP02100000",
+          { FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: code }, auth);
+        return { name, value: num(m.output.bstp_nmix_prpr), change: num(m.output.bstp_nmix_prdy_ctrt) };
+      } catch (e) { note(e); return null; }
+    };
+    const market = await idx("0001", "코스피");
+    await sleep(150);
+    const kosdaq = await idx("1001", "코스닥");
 
-    // 4) 신호등
-    for (const q of dropped) {
+    // ── 1단계 · 후보 모으기: 거래대금 상위(코스피·코스닥) = 사람들이 많이 거래하는 종목 ──
+    let pool = new Map(), source = "rank";
+    const rank = async (iscd) => {
+      const d = await kis("/uapi/domestic-stock/v1/quotations/volume-rank", "FHPST01710000", {
+        FID_COND_MRKT_DIV_CODE: "J", FID_COND_SCR_DIV_CODE: "20171", FID_INPUT_ISCD: iscd,
+        FID_DIV_CLS_CODE: "0", FID_BLNG_CLS_CODE: "3", FID_TRGT_CLS_CODE: "111111111",
+        FID_TRGT_EXLS_CLS_CODE: "0000000000", FID_INPUT_PRICE_1: "", FID_INPUT_PRICE_2: "",
+        FID_VOL_CNT: "", FID_INPUT_DATE_1: "" }, auth);
+      (d.output || []).forEach(x => {
+        const code = x.mksc_shrn_iscd || x.stck_shrn_iscd;
+        if (!/^\d{6}$/.test(code || "")) return;
+        pool.set(code, { code, name: x.hts_kor_isnm, price: num(x.stck_prpr), change: num(x.prdy_ctrt),
+          amount: num(x.acml_tr_pbmn), vol: num(x.acml_vol) });
+      });
+    };
+    try { await rank("0001"); await sleep(200); await rank("1001"); }
+    catch (e) { note(e); }
+    // 우리 우량주 목록도 함께 (순위 조회가 안 되면 이것만으로)
+    if (pool.size < 10) source = "universe";
+    const universeMissing = UNIVERSE.filter(([c]) => !pool.has(c));
+
+    // 우량주 목록 중 순위에 없는 종목은 현재가로 확인 (시간 예산 안에서)
+    const quote = async (code) => {
+      const o = (await kis("/uapi/domestic-stock/v1/quotations/inquire-price", "FHKST01010100",
+        { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: code }, auth)).output;
+      return { price: num(o.stck_prpr), change: num(o.prdy_ctrt), amount: num(o.acml_tr_pbmn), vol: num(o.acml_vol),
+        high: num(o.stck_hgpr), low: num(o.stck_lwpr), open: num(o.stck_oprc), prev: num(o.stck_sdpr),
+        foreign: num(o.frgn_ntby_qty), warn: !!(o.mrkt_warn_cls_code && o.mrkt_warn_cls_code !== "00") };
+    };
+    const runPool = async (items, fn, workers, budget) => {
+      const q = [...items];
+      const w = async () => { while (q.length && Date.now() - t0 < budget) { const it = q.shift();
+        try { await fn(it); } catch (e) { note(e); } await sleep(200); } };
+      await Promise.all(Array.from({ length: workers }, w));
+      return q.length;   // 시간 부족으로 못 본 개수
+    };
+    let skipped = await runPool(universeMissing, async ([code, name]) => {
+      pool.set(code, { code, name, ...(await quote(code)), detailed: true });
+    }, 3, 4500);
+
+    const all = [...pool.values()].filter(x => x.change != null);
+    const stage1 = all.filter(x => x.change <= RULE.dropMin && x.change >= RULE.dropMax
+                                && (x.amount == null || x.amount >= RULE.minAmount));
+    const tooDeep = all.filter(x => x.change < RULE.dropMax && (x.amount == null || x.amount >= RULE.minAmount))
+                       .sort((a, b) => a.change - b.change).slice(0, 5)
+                       .map(x => ({ code: x.code, name: x.name, change: x.change }));
+
+    // ── 2·3단계 · 1단계 통과 종목만 장중 고가·저가·외국인 확인 ──
+    stage1.sort((a, b) => (b.amount || 0) - (a.amount || 0));
+    const top = stage1.slice(0, 15);
+    skipped += await runPool(top.filter(x => !x.detailed), async (x) => {
+      Object.assign(x, await quote(x.code), { detailed: true });
+    }, 2, 7500);
+
+    const mkt = market && market.change != null ? market.change : 0;
+    for (const x of top) {
+      // 2단계 · 회복력
+      if (x.prev && x.low != null && x.low < x.prev) x.recovery = +(((x.price - x.low) / (x.prev - x.low))).toFixed(2);
+      if (x.high != null && x.low != null && x.high > x.low) x.position = +(((x.price - x.low) / (x.high - x.low))).toFixed(2);
+      // 3단계 · 수급 점수
+      let score = 0; const why3 = [];
+      if (x.foreign != null) { if (x.foreign > 0) { score++; why3.push("외국인 순매수"); } else if (x.foreign < 0) { score--; why3.push("외국인 순매도"); } }
+      const rel = +(x.change - mkt).toFixed(2); x.relMarket = rel;
+      if (rel >= -1) { score++; why3.push("시장만큼만 빠짐"); } else if (rel <= -4) { score--; why3.push("시장보다 많이 빠짐(개별 악재 가능)"); }
+      x.score = score; x.why3 = why3;
+      // 신호
       const why = [];
-      let sig = "green";
-      if (q.warn) { sig = "red"; why.push("투자경고·주의 종목"); }
-      if (q.change < RULE.maxDrop) { sig = "red"; why.push(`${RULE.maxDrop}% 넘는 급락`); }
-      if (q.change > RULE.minDrop) { sig = sig === "red" ? sig : "gray"; why.push(`하락폭 ${RULE.minDrop}% 미만`); }
-      if (q.volRatio !== undefined && q.volRatio !== null) {
-        if (q.volRatio >= RULE.volHot) { if (sig === "green") sig = "yellow"; why.push(`거래량 ${q.volRatio}배 과열`); }
-        else if (q.volRatio < RULE.volGood) { if (sig === "green") sig = "yellow"; why.push(`거래량 약함(${q.volRatio}배)`); }
-      } else { if (sig === "green") sig = "yellow"; why.push("거래량 정보 없음"); }
-      if (q.ma20Gap !== undefined && q.ma20Gap !== null && q.ma20Gap < -5) {
-        if (sig === "green") sig = "yellow"; why.push("20일선 크게 이탈");
-      }
-      q.signal = sig;
-      q.why = why;
+      let sig;
+      if (x.warn) { sig = "red"; why.push("투자경고·주의 종목"); }
+      else if (x.recovery == null) { sig = "gray"; why.push("장중 저점 정보 없음"); }
+      else if (x.recovery < RULE.recWeak) { sig = "gray"; why.push("아직 저점 근처 (회복 없음)"); }
+      else if (x.recovery >= RULE.recGood && (x.position == null || x.position >= RULE.posGood) && score >= 0) { sig = "green"; why.push("저점에서 회복 중"); }
+      else { sig = "yellow"; why.push(x.recovery >= RULE.recGood ? "회복은 했지만 수급이 약함" : "회복이 아직 약함"); }
+      x.signal = sig; x.why = why;
     }
-
-    const rank = { green: 0, yellow: 1, red: 2, gray: 3 };
-    dropped.sort((a, b) => rank[a.signal] - rank[b.signal] || a.change - b.change);
+    const rk = { green: 0, yellow: 1, gray: 2, red: 3 };
+    top.sort((a, b) => rk[a.signal] - rk[b.signal] || b.score - a.score || (b.recovery || 0) - (a.recovery || 0));
 
     res.status(200).json({
-      status: "ok",
-      asOf: new Date().toISOString(),
-      market,
-      marketStop: market && market.change !== null && market.change <= RULE.marketStop,
-      scanned: quotes.filter(q => !q.error).length,
-      total: UNIVERSE.length,
-      candidates: dropped,
-      rule: RULE,
-      errors: errs,
-      ms: Date.now() - t0,
+      status: "ok", asOf: new Date().toISOString(), source,
+      market, kosdaq, marketStop: market && market.change != null && market.change <= RULE.marketStop,
+      scanned: all.length, stage1Count: stage1.length, skipped,
+      candidates: top.map(x => ({ code: x.code, name: x.name, price: x.price, change: x.change, amount: x.amount,
+        high: x.high, low: x.low, prev: x.prev, recovery: x.recovery, position: x.position, foreign: x.foreign,
+        relMarket: x.relMarket, score: x.score, why3: x.why3, signal: x.signal, why: x.why })),
+      tooDeep, rule: RULE, errors: errs, ms: Date.now() - t0,
     });
   } catch (e) {
     res.status(200).json({ status: "error", message: String(e.message || e) });
