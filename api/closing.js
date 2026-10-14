@@ -20,15 +20,17 @@ const UNIVERSE = [
   ["096770","SK이노베이션"],["247540","에코프로비엠"],["086520","에코프로"],["196170","알테오젠"],["028300","HLB"],
 ];
 
-// 선별 기준 (0~4단계)
+// ★ 선별 기준 (0~4단계) — 숫자는 여기 한 곳만 바꾸면 화면 설명까지 같이 바뀝니다
 const RULE = {
   marketStop: -1.5,   // 0단계: 코스피가 이 이하면 '쉬는 날'
   dropMin: -2,        // 1단계: 오늘 −2% 이하로 빠졌고
   dropMax: -7,        //        −7%보다는 덜 빠진 종목 (그보다 깊으면 '과대 급락'으로 제외)
-  minAmount: 200e8,   //        거래대금 200억 원 이상
+  minAmount: 100e8,   //        거래대금 100억 원 이상 (조용한 우량주도 포함되게)
   recGood: 0.5,       // 2단계: 저점에서 빠진 폭의 50% 이상 회복하면 좋음
   recWeak: 0.2,       //        20% 미만이면 '아직 저점 근처'
   posGood: 0.5,       //        오늘 고가~저가 중 위쪽 절반에 있으면 좋음
+  relGood: -1,        // 3단계: 시장보다 1%p 이내로만 더 빠지면 +1
+  relBad: -3,         //        시장보다 3%p 이상 더 빠지면 −1 (우량주엔 3%p도 큰 차이)
 };
 
 let tokenCache = { token: null, exp: 0 };
@@ -47,22 +49,54 @@ async function getToken(key, secret) {
   return j.access_token;
 }
 
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const isRateErr = j => /EGW00201|초당/.test(`${j.msg_cd || ""} ${j.msg1 || ""}`);
+
+// 초당 조회 제한에 걸리면 잠깐 쉬었다가 최대 2번 다시 시도
 async function kis(path, trId, params, auth) {
   const url = `${BASE}${path}?${new URLSearchParams(params)}`;
-  const r = await fetch(url, {
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      authorization: `Bearer ${auth.token}`,
-      appkey: auth.key, appsecret: auth.secret, tr_id: trId, custtype: "P",
-    },
-  });
-  const j = await r.json();
-  if (j.rt_cd !== "0") throw new Error(j.msg1 || "조회 실패");
-  return j;
+  for (let t = 0; ; t++) {
+    const r = await fetch(url, {
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        authorization: `Bearer ${auth.token}`,
+        appkey: auth.key, appsecret: auth.secret, tr_id: trId, custtype: "P",
+      },
+    });
+    let j;
+    try { j = await r.json(); } catch (e) { throw new Error(`응답 해석 실패 (${r.status})`); }
+    if (j.rt_cd === "0") return j;
+    if (t < 2 && isRateErr(j)) { await sleep(500 + t * 400); continue; }
+    throw new Error(j.msg1 || "조회 실패");
+  }
 }
 
 const num = v => (v === undefined || v === null || v === "" ? null : Number(v));
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// 여러 종목 시세를 한 번에 (최대 30종목/1회) — FHKST11300006
+// 외국인 수급·투자경고 여부는 여기 없어서, 후보로 좁힌 뒤 개별 조회로 확인합니다.
+async function multiQuote(codes, mkt, auth) {
+  const out = {};
+  for (let i = 0; i < codes.length; i += 30) {
+    const batch = codes.slice(i, i + 30), params = {};
+    batch.forEach((c, k) => { params[`FID_COND_MRKT_DIV_CODE_${k + 1}`] = mkt; params[`FID_INPUT_ISCD_${k + 1}`] = c; });
+    const d = await kis("/uapi/domestic-stock/v1/quotations/intstock-multprice", "FHKST11300006", params, auth);
+    (Array.isArray(d.output) ? d.output : []).forEach(x => {
+      const code = x.inter_shrn_iscd;
+      const price = num(x.inter2_prpr);
+      if (!/^\d{6}$/.test(code || "") || !price) return;
+      let change = num(x.prdy_ctrt);
+      if (change != null && change > 0 && (x.prdy_vrss_sign === "4" || x.prdy_vrss_sign === "5")) change = -change;
+      let prev = num(x.inter2_sdpr);
+      const diff = num(x.inter2_prdy_vrss);
+      if (!prev && diff != null) prev = price - (change < 0 ? -Math.abs(diff) : Math.abs(diff));
+      out[code] = { name: x.inter_kor_isnm, price, change, amount: num(x.acml_tr_pbmn), vol: num(x.acml_vol),
+        open: num(x.inter2_oprc), high: num(x.inter2_hgpr), low: num(x.inter2_lwpr), prev };
+    });
+    if (i + 30 < codes.length) await sleep(150);
+  }
+  return out;
+}
 
 module.exports = async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
@@ -97,7 +131,7 @@ module.exports = async (req, res) => {
       return res.status(200).json({ status: "ok", rows });
     }
 
-    // ⭐ 관심종목 현재가: /api/closing?codes=005930,000660
+    // ⭐ 관심종목 현재가: /api/closing?codes=005930,000660  (&after=1 이면 NXT 애프터마켓 가격도)
     if (qv("codes")) {
       const codes = qv("codes").split(",").filter(c => /^\d{6}$/.test(c)).slice(0, 20);
       const out = {}, errs = {};
@@ -105,21 +139,29 @@ module.exports = async (req, res) => {
       const worker = async () => {
         while (queue.length) {
           const code = queue.shift();
-          for (let t = 0; t < 2; t++) {
-            try {
-              const o = (await kis("/uapi/domestic-stock/v1/quotations/inquire-price", "FHKST01010100",
-                { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: code }, auth)).output;
-              out[code] = { price: num(o.stck_prpr), change: num(o.prdy_ctrt), open: num(o.stck_oprc),
-                high: num(o.stck_hgpr), low: num(o.stck_lwpr), prev: num(o.stck_sdpr), vol: num(o.acml_vol),
-                w52low: num(o.w52_lwpr), w52high: num(o.w52_hgpr), foreign: num(o.frgn_ntby_qty) };
-              break;
-            } catch (e) { const m = String(e.message).slice(0, 60); errs[m] = (errs[m] || 0) + 1; await sleep(400); }
-          }
+          try {
+            const o = (await kis("/uapi/domestic-stock/v1/quotations/inquire-price", "FHKST01010100",
+              { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: code }, auth)).output;
+            out[code] = { price: num(o.stck_prpr), change: num(o.prdy_ctrt), open: num(o.stck_oprc),
+              high: num(o.stck_hgpr), low: num(o.stck_lwpr), prev: num(o.stck_sdpr), vol: num(o.acml_vol),
+              w52low: num(o.w52_lwpr), w52high: num(o.w52_hgpr), foreign: num(o.frgn_ntby_qty) };
+          } catch (e) { const m = String(e.message).slice(0, 60); errs[m] = (errs[m] || 0) + 1; }
           await sleep(180);
         }
       };
       await Promise.all([worker(), worker()]);
-      return res.status(200).json({ status: "ok", quotes: out, errors: errs });
+      let after = null;
+      if (qv("after") === "1") {
+        try {
+          const nx = await multiQuote(codes, "NX", auth);
+          after = {};
+          Object.entries(nx).forEach(([c, q]) => {
+            const krx = out[c] && out[c].price;
+            after[c] = { price: q.price, vsClose: krx ? +(((q.price / krx) - 1) * 100).toFixed(2) : null };
+          });
+        } catch (e) { errs["애프터마켓: " + String(e.message).slice(0, 40)] = 1; }
+      }
+      return res.status(200).json({ status: "ok", quotes: out, after, errors: errs });
     }
 
     const t0 = Date.now();
@@ -135,31 +177,46 @@ module.exports = async (req, res) => {
       } catch (e) { note(e); return null; }
     };
     const market = await idx("0001", "코스피");
-    await sleep(150);
+    await sleep(120);
     const kosdaq = await idx("1001", "코스닥");
 
-    // ── 1단계 · 후보 모으기: 거래대금 상위(코스피·코스닥) = 사람들이 많이 거래하는 종목 ──
-    let pool = new Map(), source = "rank";
-    const rank = async (iscd) => {
-      const d = await kis("/uapi/domestic-stock/v1/quotations/volume-rank", "FHPST01710000", {
-        FID_COND_MRKT_DIV_CODE: "J", FID_COND_SCR_DIV_CODE: "20171", FID_INPUT_ISCD: iscd,
-        FID_DIV_CLS_CODE: "0", FID_BLNG_CLS_CODE: "3", FID_TRGT_CLS_CODE: "111111111",
-        FID_TRGT_EXLS_CLS_CODE: "0000000000", FID_INPUT_PRICE_1: "", FID_INPUT_PRICE_2: "",
-        FID_VOL_CNT: "", FID_INPUT_DATE_1: "" }, auth);
-      (d.output || []).forEach(x => {
-        const code = x.mksc_shrn_iscd || x.stck_shrn_iscd;
-        if (!/^\d{6}$/.test(code || "")) return;
-        pool.set(code, { code, name: x.hts_kor_isnm, price: num(x.stck_prpr), change: num(x.prdy_ctrt),
-          amount: num(x.acml_tr_pbmn), vol: num(x.acml_vol) });
-      });
+    // ── 1단계 · 후보 모으기: 거래대금 상위(코스피·코스닥) ──
+    const pool = new Map();
+    const rankInfo = {};   // 시장별로 몇 개 받았는지 / 왜 실패했는지 (화면에 표시)
+    const rank = async (iscd, label) => {
+      try {
+        const d = await kis("/uapi/domestic-stock/v1/quotations/volume-rank", "FHPST01710000", {
+          FID_COND_MRKT_DIV_CODE: "J", FID_COND_SCR_DIV_CODE: "20171", FID_INPUT_ISCD: iscd,
+          FID_DIV_CLS_CODE: "0", FID_BLNG_CLS_CODE: "3", FID_TRGT_CLS_CODE: "111111111",
+          FID_TRGT_EXLS_CLS_CODE: "0000000000", FID_INPUT_PRICE_1: "", FID_INPUT_PRICE_2: "",
+          FID_VOL_CNT: "", FID_INPUT_DATE_1: "" }, auth);
+        let n = 0;
+        (Array.isArray(d.output) ? d.output : []).forEach(x => {
+          const code = x.mksc_shrn_iscd || x.stck_shrn_iscd;
+          if (!/^\d{6}$/.test(code || "")) return;
+          pool.set(code, { code, name: x.hts_kor_isnm, price: num(x.stck_prpr), change: num(x.prdy_ctrt),
+            amount: num(x.acml_tr_pbmn), vol: num(x.acml_vol) });
+          n++;
+        });
+        rankInfo[label] = n ? n : "0개 (빈 응답)";
+      } catch (e) { rankInfo[label] = "실패: " + String(e.message).slice(0, 40); }
     };
-    try { await rank("0001"); await sleep(200); await rank("1001"); }
-    catch (e) { note(e); }
-    // 우리 우량주 목록도 함께 (순위 조회가 안 되면 이것만으로)
-    if (pool.size < 10) source = "universe";
-    const universeMissing = UNIVERSE.filter(([c]) => !pool.has(c));
+    await sleep(120);
+    await rank("0001", "코스피");      // 하나가 실패해도 나머지는 따로 시도
+    await sleep(150);
+    await rank("1001", "코스닥");
+    const rankCount = pool.size;
 
-    // 우량주 목록 중 순위에 없는 종목은 현재가로 확인 (시간 예산 안에서)
+    // 우량주 목록 중 순위에 없는 종목 → 한 번에 30종목씩 조회 (42개 = 2번)
+    const universeMissing = UNIVERSE.filter(([c]) => !pool.has(c));
+    let skipped = 0, uniMode = "multi";
+    try {
+      const mq = await multiQuote(universeMissing.map(([c]) => c), "J", auth);
+      universeMissing.forEach(([code, name]) => { if (mq[code]) pool.set(code, { code, ...mq[code], name }); });
+    } catch (e) {
+      note(e); uniMode = "single";
+    }
+
     const quote = async (code) => {
       const o = (await kis("/uapi/domestic-stock/v1/quotations/inquire-price", "FHKST01010100",
         { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: code }, auth)).output;
@@ -170,13 +227,16 @@ module.exports = async (req, res) => {
     const runPool = async (items, fn, workers, budget) => {
       const q = [...items];
       const w = async () => { while (q.length && Date.now() - t0 < budget) { const it = q.shift();
-        try { await fn(it); } catch (e) { note(e); } await sleep(200); } };
+        try { await fn(it); } catch (e) { note(e); } await sleep(150); } };
       await Promise.all(Array.from({ length: workers }, w));
       return q.length;   // 시간 부족으로 못 본 개수
     };
-    let skipped = await runPool(universeMissing, async ([code, name]) => {
-      pool.set(code, { code, name, ...(await quote(code)), detailed: true });
-    }, 3, 4500);
+    // 한꺼번에 조회가 안 되면 예전처럼 하나씩 (시간 예산 안에서)
+    if (uniMode === "single") {
+      skipped += await runPool(universeMissing, async ([code, name]) => {
+        pool.set(code, { code, name, ...(await quote(code)), detailed: true });
+      }, 3, 4500);
+    }
 
     const all = [...pool.values()].filter(x => x.change != null);
     const stage1 = all.filter(x => x.change <= RULE.dropMin && x.change >= RULE.dropMax
@@ -185,12 +245,12 @@ module.exports = async (req, res) => {
                        .sort((a, b) => a.change - b.change).slice(0, 5)
                        .map(x => ({ code: x.code, name: x.name, change: x.change }));
 
-    // ── 2·3단계 · 1단계 통과 종목만 장중 고가·저가·외국인 확인 ──
+    // ── 2·3단계 · 1단계 통과 종목만 개별 조회 (고가·저가·외국인·투자경고) ──
     stage1.sort((a, b) => (b.amount || 0) - (a.amount || 0));
     const top = stage1.slice(0, 15);
     skipped += await runPool(top.filter(x => !x.detailed), async (x) => {
       Object.assign(x, await quote(x.code), { detailed: true });
-    }, 2, 7500);
+    }, 2, 8000);
 
     const mkt = market && market.change != null ? market.change : 0;
     for (const x of top) {
@@ -201,7 +261,7 @@ module.exports = async (req, res) => {
       let score = 0; const why3 = [];
       if (x.foreign != null) { if (x.foreign > 0) { score++; why3.push("외국인 순매수"); } else if (x.foreign < 0) { score--; why3.push("외국인 순매도"); } }
       const rel = +(x.change - mkt).toFixed(2); x.relMarket = rel;
-      if (rel >= -1) { score++; why3.push("시장만큼만 빠짐"); } else if (rel <= -4) { score--; why3.push("시장보다 많이 빠짐(개별 악재 가능)"); }
+      if (rel >= RULE.relGood) { score++; why3.push("시장만큼만 빠짐"); } else if (rel <= RULE.relBad) { score--; why3.push("시장보다 많이 빠짐(개별 악재 가능)"); }
       x.score = score; x.why3 = why3;
       // 신호
       const why = [];
@@ -211,13 +271,15 @@ module.exports = async (req, res) => {
       else if (x.recovery < RULE.recWeak) { sig = "gray"; why.push("아직 저점 근처 (회복 없음)"); }
       else if (x.recovery >= RULE.recGood && (x.position == null || x.position >= RULE.posGood) && score >= 0) { sig = "green"; why.push("저점에서 회복 중"); }
       else { sig = "yellow"; why.push(x.recovery >= RULE.recGood ? "회복은 했지만 수급이 약함" : "회복이 아직 약함"); }
+      if (!x.detailed) why.push("세부 확인 못 함");
       x.signal = sig; x.why = why;
     }
     const rk = { green: 0, yellow: 1, gray: 2, red: 3 };
     top.sort((a, b) => rk[a.signal] - rk[b.signal] || b.score - a.score || (b.recovery || 0) - (a.recovery || 0));
 
     res.status(200).json({
-      status: "ok", asOf: new Date().toISOString(), source,
+      status: "ok", asOf: new Date().toISOString(),
+      source: rankCount >= 10 ? "rank" : "universe", rankInfo, rankCount, uniMode,
       market, kosdaq, marketStop: market && market.change != null && market.change <= RULE.marketStop,
       scanned: all.length, stage1Count: stage1.length, skipped,
       candidates: top.map(x => ({ code: x.code, name: x.name, price: x.price, change: x.change, amount: x.amount,
