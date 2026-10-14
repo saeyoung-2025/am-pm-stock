@@ -163,6 +163,13 @@
   .wl-item .lbl{font-size:11px;color:var(--sub)}
   .badge{white-space:nowrap}
   .wl-item:last-child{border-bottom:none}
+  .wl-item .hold{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:7px;padding:7px 10px;border-radius:10px;
+                 background:#f6f7fb;font-size:12px;color:var(--sub);cursor:pointer}
+  .wl-item .hold b{font-family:Nunito,sans-serif;font-size:14px}
+  .wl-item .hold .bar{flex-basis:100%;height:6px;border-radius:9px;background:linear-gradient(90deg,#e8eefc,#fdeceb);position:relative}
+  .wl-item .hold .bar i{position:absolute;top:-3px;width:3px;height:12px;border-radius:2px;background:#333}
+  .wl-item .hold.stop{background:#eaf1ff;outline:1.5px solid #8fb0ec} .wl-item .hold.take{background:#fff0ee;outline:1.5px solid #f0a59c}
+  .wl-item .buy{font-size:11px;padding:3px 9px;border-radius:99px !important;background:#fff;border:1px solid var(--line);color:var(--sub)}
   .wl-item.hit-up{background:#fff3f2} .wl-item.hit-down{background:#eff5ff}
   .wl-item .nm{flex:1;min-width:0}
   .wl-item .nm b{font-weight:400;font-size:16px}
@@ -727,6 +734,8 @@ setTimeout(fillResults, 3000);
 setInterval(fillResults, 10 * 60 * 1000);
 
 /* ── ? 도움말 팝업 ── */
+/* ★ 보유 종목 기본 기준 — 매수가 대비 */
+const HOLD_DEF = { stop: -7, take: 10 };
 const HELP = {
   closing: r => `<h3>🌇 종가베팅 후보를 고르는 방법 (0~4단계)</h3>
     <table>
@@ -769,6 +778,9 @@ const HELP = {
   watch: `<h3>⭐ 관심종목 신호 기준</h3>
     <table>
       <tr><th>신호</th><th>언제 뜨나</th></tr>
+      <tr><td>🚨 손절선</td><td>내 매수가 대비 손절선(기본 ${HOLD_DEF.stop}%)까지 빠졌을 때</td></tr>
+      <tr><td>손절 절반</td><td>손절선의 절반(기본 ${HOLD_DEF.stop/2}%)까지 빠졌을 때 — 미리 경고</td></tr>
+      <tr><td>🎯 목표 도달</td><td>내 매수가 대비 목표(기본 +${HOLD_DEF.take}%)까지 올랐을 때</td></tr>
       <tr><td>🔔 기준 넘음</td><td>오늘 등락률이 내가 정한 %(방향 포함)를 넘을 때</td></tr>
       <tr><td>20일선 붕괴</td><td>어제 종가는 20일선 위, 지금 가격은 아래</td></tr>
       <tr><td>20일선 회복</td><td>어제 종가는 20일선 아래, 지금 가격은 위</td></tr>
@@ -776,6 +788,10 @@ const HELP = {
       <tr><td>52주 최저가 근처</td><td>지금 가격이 1년 최저가보다 5% 이내</td></tr>
       <tr><td>아래꼬리 반등</td><td>어제 종가보다 3% 넘게 빠졌다가, 빠진 폭의 절반 이상 회복</td></tr>
     </table>
+    <h4>💰 보유 종목 지키기</h4>
+    <p>산 종목은 <b>💰 샀어요</b>를 눌러 매수가를 넣으세요. 손절선·목표를 함께 정할 수 있고, 회색 박스를 누르면 다시 고칠 수 있어요.<br>
+    막대의 검은 표시가 <b>왼쪽 끝(손절선) ~ 오른쪽 끝(목표)</b> 사이 어디쯤인지 보여 줍니다.<br>
+    <small>기본값 ${HOLD_DEF.stop}% / +${HOLD_DEF.take}%: 우량주 스윙에서 흔히 쓰는 범위. 손실을 이익보다 작게 끊는 게 핵심이에요 (−29%까지 두지 않기).</small></p>
     <h4>알림</h4>
     <p>장중(09:00~15:30)에 앱을 열어 두면 5분마다 확인합니다. 같은 종목·같은 신호는 하루 한 번만 알려요.<br>
     20일선·거래량 계산용 기록은 하루 한 번만 받아 저장합니다.</p>
@@ -808,8 +824,8 @@ const store = {
   get(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch(e){ return d; } },
   set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
 };
-let watch = store.get("mm_watch", []);          // [{code,name,th,dir,on}]
-watch.forEach(w => { if (!w.dir) w.dir = "both"; });
+let watch = store.get("mm_watch", []);          // [{code,name,th,dir,on, buy?,stop,take}]  buy = 내 매수가 (보유 중일 때만)
+watch.forEach(w => { if (!w.dir) w.dir = "both"; if (w.stop == null) w.stop = HOLD_DEF.stop; if (w.take == null) w.take = HOLD_DEF.take; });
 let wlQuotes = {}, wlAfter = null;
 let wlLoaded = false;
 let openCode = null;                              // 펼쳐진 종목
@@ -845,10 +861,20 @@ function stats(code){
 }
 
 /* 신호 계산 */
+function myRet(w){
+  const q = wlQuotes[w.code];
+  return w.buy && q && q.price ? +(((q.price / w.buy) - 1) * 100).toFixed(2) : null;
+}
 function signals(w){
   const q = wlQuotes[w.code], st = stats(w.code), out = [];
   if (!q || q.price == null) return out;
   const ch = q.change;
+  const my = myRet(w);
+  if (my != null){
+    if (my <= w.stop) out.push({ k:"stop", t:`손절선 ${w.stop}% 도달 (지금 ${pct(my)})`, c:"down" });
+    else if (my <= w.stop / 2) out.push({ k:"warn", t:`손절선 절반 지점 (지금 ${pct(my)})`, c:"down" });
+    if (my >= w.take) out.push({ k:"take", t:`목표 +${w.take}% 도달 (지금 ${pct(my)})`, c:"up" });
+  }
   const dirOk = w.dir === "both" || (w.dir === "up" && ch > 0) || (w.dir === "down" && ch < 0);
   if (ch != null && Math.abs(ch) >= w.th && dirOk)
     out.push({ k:"th", t:`기준 ${ch > 0 ? "+" : "−"}${w.th}% 넘음`, c: ch > 0 ? "up" : "down" });
@@ -863,6 +889,9 @@ function signals(w){
   return out;
 }
 const TIP = {
+  stop:"내가 정한 손절선까지 빠졌습니다. '지금 이 가격에 새로 사겠나?'를 자문해 보세요. 아니라면 정리할 때예요.",
+  warn:"손절선의 절반만큼 빠졌습니다. 아직 괜찮지만, 왜 빠지는지 뉴스·공시를 한 번 확인해 두세요.",
+  take:"목표 수익에 도달했습니다. 전부 팔거나, 절반만 팔아 수익을 지키는 방법도 있어요.",
   th:"내가 정한 기준(%)보다 많이 움직였다는 뜻입니다.",
   ma_break:"어제까지 한 달 평균(20일선) 위에 있다가 오늘 아래로 떨어졌습니다. 오르던 흐름이 꺾일 수 있다는 신호예요.",
   ma_back:"한 달 평균(20일선) 아래에 있다가 오늘 다시 올라섰습니다. 흐름이 되살아날 수 있다는 신호예요.",
@@ -882,7 +911,7 @@ function addWatch(){
   else { alert("목록에서 고르시거나 종목코드 6자리를 넣어 주세요."); return; }
   if (watch.some(w => w.code === code)) { alert("이미 추가된 종목입니다."); return; }
   if (watch.length >= 20) { alert("관심종목은 20개까지 넣을 수 있어요."); return; }
-  watch.push({ code, name, th:5, dir:"both", on:true });
+  watch.push({ code, name, th:5, dir:"both", on:true, stop:HOLD_DEF.stop, take:HOLD_DEF.take });
   saveWatch(); inp.value = ""; renderWatch(); loadWatch();
 }
 document.getElementById("wlAddBtn").addEventListener("click", addWatch);
@@ -907,9 +936,11 @@ function renderWatch(){
         <div class="px">${q && q.price != null ? q.price.toLocaleString() : "–"}
           <small class="${ch == null ? "" : ch >= 0 ? "up" : "down"}">${ch == null ? "데이터 없음" : pct(ch)}</small>${afterTag(w.code)}</div>
       </div>
+      ${holdHTML(w, i)}
       ${sg.length ? `<div class="chips">${sg.map(x => `<span class="chip ${x.c}">${x.k === "th" ? "🔔 " : ""}${x.t}</span>`).join("")}</div>` : ""}
       <div class="r2">
         <em>${w.code}</em>
+        ${w.buy ? "" : `<button class="buy" data-i="${i}" data-act="buy">💰 샀어요</button>`}
         <span class="lbl">알림</span><button class="sw ${w.on ? "on" : ""}" data-i="${i}" data-act="sw" title="알림 켜기/끄기"></button>
         <button class="dir" data-i="${i}" data-act="dir">${DIRS[w.dir]}</button>
         <div class="th"><button data-i="${i}" data-act="minus">−</button><span>${w.th}%</span><button data-i="${i}" data-act="plus">+</button></div>
@@ -919,6 +950,19 @@ function renderWatch(){
   }).join("") + `</div>`;
 }
 
+function holdHTML(w, i){
+  if (!w.buy) return "";
+  const my = myRet(w), q = wlQuotes[w.code];
+  const sp = Math.round(w.buy * (1 + w.stop / 100)), tp = Math.round(w.buy * (1 + w.take / 100));
+  const cls = my == null ? "" : my <= w.stop ? "stop" : my >= w.take ? "take" : "";
+  // 손절선(왼쪽 끝) ~ 목표(오른쪽 끝) 사이 어디쯤인지
+  const posBar = my == null ? "" : `<span class="bar"><i style="left:calc(${Math.max(0, Math.min(100, (my - w.stop) / (w.take - w.stop) * 100))}% - 1px)"></i></span>`;
+  return `<div class="hold ${cls}" data-i="${i}" data-act="buy">
+    <span>내 매수가 ${w.buy.toLocaleString()}</span>
+    <b class="${my == null ? "" : my >= 0 ? "up" : "down"}">${my == null ? "–" : pct(my)}</b>
+    <span style="margin-left:auto">손절 ${sp.toLocaleString()} · 목표 ${tp.toLocaleString()}</span>
+    ${posBar}</div>`;
+}
 function afterTag(code){
   const a = wlAfter && wlAfter[code];
   if (!a || !a.price) return "";
@@ -971,11 +1015,25 @@ document.getElementById("wlBody").addEventListener("click", async e => {
     }
     return;
   }
+  if (act === "buy"){
+    const cur = (wlQuotes[w.code] || {}).price;
+    const v = prompt(`${w.name} 매수가 (1주 평균 단가)\n지우면 '보유 안 함'이 됩니다.`, w.buy || cur || "");
+    if (v === null) return;
+    const n = Number(String(v).replace(/[^\d.]/g, ""));
+    if (!n) { w.buy = null; }
+    else {
+      w.buy = n;
+      const st = prompt(`손절선 (매수가 대비 %, 예: -7)`, w.stop); if (st !== null && +st <= -1 && +st >= -50) w.stop = +st;
+      const tk = prompt(`목표 수익 (매수가 대비 %, 예: 10)`, w.take); if (tk !== null && +tk >= 1 && +tk <= 100) w.take = +tk;
+      w.on = true;
+    }
+    saveWatch(); renderWatch(); checkAlerts(); return;
+  }
   if (act === "sw") w.on = !w.on;
   if (act === "plus") w.th = Math.min(30, w.th + 1);
   if (act === "minus") w.th = Math.max(1, w.th - 1);
   if (act === "dir") w.dir = w.dir === "both" ? "up" : w.dir === "up" ? "down" : "both";
-  if (act === "del") { if (!confirm(`${w.name}을(를) 삭제할까요?`)) return; watch.splice(i, 1); openCode = null; }
+  if (act === "del") { if (!confirm(`${w.name}을(를) 삭제할까요?${w.buy ? "\n(매수가 기록도 함께 지워집니다)" : ""}`)) return; watch.splice(i, 1); openCode = null; }
   saveWatch(); renderWatch();
 });
 
@@ -997,8 +1055,9 @@ async function loadWatch(){
 document.getElementById("wlRefresh").addEventListener("click", loadWatch);
 
 /* 알림 */
-const ALERT_KINDS = { th:"등락 기준", ma_break:"20일선 붕괴", ma_back:"20일선 회복", vol:"거래량 급증", low52:"52주 최저가 근처", tail:"아래꼬리 반등" };
-let alertOn = store.get("mm_alert_kinds", { th:true, ma_break:true, ma_back:true, vol:true, low52:false, tail:true });
+const ALERT_KINDS = { stop:"손절선", warn:"손절 절반", take:"목표 도달", th:"등락 기준", ma_break:"20일선 붕괴", ma_back:"20일선 회복", vol:"거래량 급증", low52:"52주 최저가 근처", tail:"아래꼬리 반등" };
+let alertOn = { stop:true, warn:true, take:true, ...store.get("mm_alert_kinds", {}) };
+const _old = store.get("mm_alert_kinds", null); if (!_old) Object.assign(alertOn, { th:true, ma_break:true, ma_back:true, vol:true, low52:false, tail:true });
 function renderAlertKinds(){
   document.getElementById("wlKinds").innerHTML = Object.entries(ALERT_KINDS).map(([k, t]) =>
     `<label><input type="checkbox" data-k="${k}" ${alertOn[k] ? "checked" : ""}> ${t}</label>`).join("");
@@ -1040,13 +1099,12 @@ function checkAlerts(){
       if (!alertOn[x.k]) return;
       const key = `${day}-${w.code}-${x.k}`;
       if (sent[key]) return;
-      new Notification(`🔔 ${w.name} · ${x.t}`, { body: `현재가 ${q.price.toLocaleString()}원 (${pct(q.change)}) — ${TIP[x.k]}`, tag: key });
+      new Notification(`${x.k === "stop" ? "🚨" : x.k === "take" ? "🎯" : "🔔"} ${w.name} · ${x.t}`, { body: `현재가 ${q.price.toLocaleString()}원 (${pct(q.change)}) — ${TIP[x.k]}`, tag: key });
       sent[key] = 1;
     });
   });
   store.set("mm_alerted", sent);
 }
-// 장중에는 앱이 열려 있는 동안 5분마다 확인
 // 장중 + 애프터마켓(~20:00)에는 앱이 열려 있는 동안 5분마다 확인
 setInterval(() => { if ((marketOpen() || afterHours()) && watch.length) loadWatch(); }, 5 * 60 * 1000);
 document.getElementById("refresh").addEventListener("click", refresh);
