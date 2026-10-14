@@ -113,12 +113,38 @@ module.exports = async (req, res) => {
 
     const qv = k => (req.query && req.query[k]) ? String(req.query[k]) : "";
 
-    // ⭐ 일봉 30일: /api/closing?daily=005930
+    // 날짜 (한국 시간) — 오늘과 160일 전 (거래일로 약 100일)
+    const kstYmd = d => new Date(d.getTime() + 9 * 3600e3).toISOString().slice(0, 10).replace(/-/g, "");
+    const today = kstYmd(new Date()), from = kstYmd(new Date(Date.now() - 160 * 86400e3));
+
+    // ⭐ 일봉 약 100일: /api/closing?daily=005930  (60일선·변동폭 계산용. 실패하면 30일짜리로)
     if (/^\d{6}$/.test(qv("daily"))) {
-      const d = await kis("/uapi/domestic-stock/v1/quotations/inquire-daily-price", "FHKST01010400",
-        { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: qv("daily"), FID_PERIOD_DIV_CODE: "D", FID_ORG_ADJ_PRC: "1" }, auth);
-      const rows = (d.output || []).map(x => ({ date: x.stck_bsop_date, open: num(x.stck_oprc), high: num(x.stck_hgpr),
-        low: num(x.stck_lwpr), close: num(x.stck_clpr), vol: num(x.acml_vol) }));
+      let rows = [];
+      try {
+        const d = await kis("/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice", "FHKST03010100",
+          { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: qv("daily"), FID_INPUT_DATE_1: from, FID_INPUT_DATE_2: today,
+            FID_PERIOD_DIV_CODE: "D", FID_ORG_ADJ_PRC: "0" }, auth);
+        rows = (d.output2 || []).filter(x => x.stck_bsop_date && num(x.stck_clpr)).map(x => ({ date: x.stck_bsop_date,
+          open: num(x.stck_oprc), high: num(x.stck_hgpr), low: num(x.stck_lwpr), close: num(x.stck_clpr), vol: num(x.acml_vol) }));
+      } catch (e) {}
+      if (rows.length < 30) {
+        const d = await kis("/uapi/domestic-stock/v1/quotations/inquire-daily-price", "FHKST01010400",
+          { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: qv("daily"), FID_PERIOD_DIV_CODE: "D", FID_ORG_ADJ_PRC: "1" }, auth);
+        rows = (d.output || []).map(x => ({ date: x.stck_bsop_date, open: num(x.stck_oprc), high: num(x.stck_hgpr),
+          low: num(x.stck_lwpr), close: num(x.stck_clpr), vol: num(x.acml_vol) }));
+      }
+      rows.sort((a, b) => b.date.localeCompare(a.date));   // 최신 날짜가 맨 앞
+      return res.status(200).json({ status: "ok", rows });
+    }
+
+    // ⭐ 코스피 일별 지수 (시장 대비 강도 계산용): /api/closing?index=0001
+    if (/^\d{4}$/.test(qv("index"))) {
+      const d = await kis("/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice", "FHKUP03500100",
+        { FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: qv("index"), FID_INPUT_DATE_1: from, FID_INPUT_DATE_2: today,
+          FID_PERIOD_DIV_CODE: "D" }, auth);
+      const rows = (d.output2 || []).filter(x => x.stck_bsop_date && num(x.bstp_nmix_prpr))
+        .map(x => ({ date: x.stck_bsop_date, close: num(x.bstp_nmix_prpr) }))
+        .sort((a, b) => b.date.localeCompare(a.date));
       return res.status(200).json({ status: "ok", rows });
     }
 
