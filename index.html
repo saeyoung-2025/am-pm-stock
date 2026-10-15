@@ -48,6 +48,7 @@
   /* MSCI 월간 카드 */
   .msci-card{display:flex;align-items:center;padding:6px}
   .mk h3{font-size:15px;margin:2px 0 10px}
+  .mk .upd{font-size:11px;color:var(--faint);margin:10px 0 0;text-align:right}
   .eco .tvcal{height:430px;margin:0 -6px} .eco .tvnews{height:420px;margin:0 -6px}
   .eco details{margin-top:10px;border-top:1px dashed var(--line);padding-top:8px}
   .eco summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--accent)}
@@ -587,14 +588,16 @@ function debtHTML(){
     if (now.misu >= 1e6) warn.push(`@w_misu@미수금 ${won6(now.misu)} — 1조 원 이상은 단기 과열 신호로 자주 언급돼요`);
   }
   if (warn.length) h += `<div class="warnbox">${warnLines(warn)}</div>`;
-  h += `<p style="font-size:11px;color:var(--faint);margin-top:8px">매일 발표되지만 1~2 영업일 늦어요 · 월·연 비교는 일별 자료로 앱이 계산${(DEBT.notes || []).length ? ` · ${esc(DEBT.notes.join(" · "))}` : ""}</p>`;
+  h += updLine(debtAt, "debt");
+  h += `<p style="font-size:11px;color:var(--faint);margin-top:2px">매일 발표되지만 1~2 영업일 늦어요 · 월·연 비교는 일별 자료로 앱이 계산${(DEBT.notes || []).length ? ` · ${esc(DEBT.notes.join(" · "))}` : ""}</p>`;
   return h + `</div>`;
 }
 async function loadDebt(){
   if (location.protocol === "file:") return;
   const c = ls.get("mm_debt", null);
-  if (c && Date.now() - c.at < 3 * 60 * 60 * 1000) DEBT = c.d;
-  else { try { const j = await api("debt=1"); if (j && j.status === "ok") { DEBT = j; if (j.credit || j.fund) ls.set("mm_debt", { at: Date.now(), d: j }); } } catch(e) {} }
+  if (c && c.slot === debtSlot()) DEBT = c.d;
+  else { try { const j = await api("debt=1"); if (j && j.status === "ok" && (j.credit || j.fund)) { DEBT = j; ls.set("mm_debt", { at: Date.now(), slot: debtSlot(), d: j }); } else DEBT = c ? c.d : j; } catch(e) { if (c) DEBT = c.d; } }
+  debtAt = (ls.get("mm_debt", null) || {}).at || null;
   const el = document.getElementById("debtBox"); if (el) el.innerHTML = debtHTML();
 }
 
@@ -662,13 +665,39 @@ function mkHTML(){
   const vk = MK.vkospi && MK.vkospi.value;
   if (vk >= 30) warn.push(`@w_vk@VKOSPI ${vk.toFixed(1)} — 시장이 크게 출렁일 것으로 보는 상태`);
   if (warn.length) h += `<div class="warnbox">${warnLines(warn)}<br><small>종가베팅·신규 매수는 평소보다 작게, 손절은 꼭 지키기.</small></div>`;
-  return h + `</div>`;
+  return h + updLine(mkAt, "mk") + `</div>`;
 }
+/* 언제 새로 받나 — 주제마다 자료가 실제로 바뀌는 때에만
+   · 체온·VKOSPI: 장중(09:00~15:30) 10분마다 / 장 마감 뒤 15:40에 한 번(종가 확정) / 그 외 시간은 마지막 값 그대로
+   · 빚투: 금투협이 하루 한 번 발표 → 하루 두 번(09시 이후 · 17시 이후)만 확인 */
+let mkAt = null, debtAt = null;
+const kstMin = () => { const p = kstParts(); return p.h * 60 + p.mi; };
+const atKst = ms => { const d = new Date(ms + 9 * 3600e3); return { day: d.toISOString().slice(0,10).replace(/-/g,""), min: d.getUTCHours() * 60 + d.getUTCMinutes() }; };
+function mkNeedsFetch(c){
+  const a = atKst(c.at), today = todayKey(), now = kstMin();
+  if (marketOpen()) return Date.now() - c.at >= 10 * 60 * 1000;
+  if (isTradingDay() && now >= 940) return !(a.day === today && a.min >= 940);   // 오늘 종가 확정 후 아직 안 받았으면
+  return a.day !== today && Date.now() - c.at > 12 * 3600e3;                     // 밤·주말: 반나절 지난 경우만
+}
+const debtSlot = () => { const m = kstMin(); return todayKey() + (m >= 17 * 60 ? "pm" : m >= 9 * 60 ? "am" : "early"); };
+function nextNote(kind){
+  if (kind === "mk") {
+    if (marketOpen()) return "장중 · 10분마다 자동";
+    if (isTradingDay() && kstMin() < 540) return "다음: 09:00 장 시작 후";
+    if (isTradingDay() && kstMin() < 940) return "다음: 15:40 종가 확정 후";
+    return "다음: 다음 거래일 09:00";
+  }
+  const m = kstMin();
+  return m < 540 ? "다음 확인: 09:00 이후" : m < 1020 ? "다음 확인: 17:00 이후" : "다음 확인: 내일 09:00 이후";
+}
+const hhmm = ms => { const a = atKst(ms); return `${String(Math.floor(a.min / 60)).padStart(2,"0")}:${String(a.min % 60).padStart(2,"0")}`; };
+const updLine = (at, kind) => `<p class="upd">${tipHTML(kind === "mk" ? "u_mk" : "u_debt")}🕒 ${at ? hhmm(at) + " 받음" : "아직 안 받음"} · ${nextNote(kind)}</p>`;
 async function loadMarket(){
   if (location.protocol === "file:") return;
   const c = ls.get("mm_market", null);
-  if (c && Date.now() - c.at < 10 * 60 * 1000) MK = c.d;
-  else { try { const j = await api("market=1"); if (j && j.status === "ok") { MK = j; ls.set("mm_market", { at: Date.now(), d: j }); } } catch(e) {} }
+  if (c && !mkNeedsFetch(c)) MK = c.d;
+  else { try { const j = await api("market=1"); if (j && j.status === "ok") { MK = j; ls.set("mm_market", { at: Date.now(), d: j }); } else if (c) MK = c.d; } catch(e) { if (c) MK = c.d; } }
+  mkAt = (ls.get("mm_market", null) || {}).at || null;
   const el = document.getElementById("mkTemp"); if (el) el.innerHTML = mkHTML();
   const vc = document.getElementById("vkCard"); if (vc) vc.innerHTML = vkHTML();
 }
@@ -979,6 +1008,7 @@ const HOLD_DEF = { stop: -7, take: 10 };
 /* 📌 업데이트 기록 — 새로 바꿀 때마다 맨 위에 추가 */
 const UPDATE_LOG = [
   { date:"2026.10.15", tab:"morning", items:[
+    ["주제별 갱신 시점", "자료가 실제로 바뀌는 때에만 새로 받기: 체온·VKOSPI는 장중 10분마다·장 마감 후 한 번, 빚투는 하루 두 번. 각 코너 아래 🕒 줄에 받은 시각과 다음 갱신 시점 표시."],
     ["VKOSPI (한국형 공포지수)", "기사에서 'VKOSPI 50 돌파'가 공포 신호로 쓰여서. 미국 VIX의 한국판이라 한국장 분위기에 더 직접적."],
     ["📅 경제 일정 · 📰 뉴스", "CPI 같은 발표가 다음 날 한국장에 큰 영향을 줘서. 일정 + '예상보다 높으면 어떻게 되나' 읽는 법 + 금리 확률(FedWatch) 바로가기."],
     ["💳 빚투 현황", "반대매매·미수금·신용융자가 급증한다는 기사를 보고. 빚으로 산 물량이 강제로 팔리면 하락이 더 커지니 '숨은 위험'으로 확인."],
@@ -1503,6 +1533,8 @@ function checkAlerts(){
 }
 // 장중 + 애프터마켓(~20:00)에는 앱이 열려 있는 동안 5분마다 확인
 setInterval(() => { if ((marketOpen() || afterHours()) && watch.length) loadWatch(); }, 5 * 60 * 1000);
+// 아침 탭: 1분마다 '받을 때가 됐나'만 확인 → 때가 됐을 때만 실제로 받음
+setInterval(() => { if (currentTab !== "morning") return; const c = ls.get("mm_market", null); if (!c || mkNeedsFetch(c)) loadMarket(); const d = ls.get("mm_debt", null); if (!d || d.slot !== debtSlot()) loadDebt(); }, 60 * 1000);
 document.getElementById("refresh").addEventListener("click", refresh);
 refresh();
 /* ── ? 메모 (마우스를 올리거나 누르면 설명) ── */
@@ -1553,6 +1585,8 @@ const TIPS = {
   w_credit:["경고 기준 · 신용잔고 1년 최고 근처","신용융자 잔고가 1년 최고치의 97% 이상이면 떠요.","근거: 빚이 많이 쌓인 상태에서 주가가 빠지면 담보 부족 → 강제 매도가 연쇄적으로 나올 수 있어서."],
   w_forced:["경고 기준 · 반대매매 2배","이번 달 반대매매 하루 평균이 지난달의 2배 이상이면 떠요.","근거: 강제 매도가 평소보다 크게 늘었다 = 빚투 물량이 시장에 쏟아지는 중."],
   w_misu:["경고 기준 · 미수금 1조","위탁매매 미수금이 1조 원 이상이면 떠요.","근거: 기사에서 '1조 돌파'가 단기 빚투 과열의 상징적인 선으로 자주 쓰여요 (평소 수천억 원대)."],
+  u_mk:["🕒 체온·VKOSPI 받는 때","장중(09:00~15:30): 10분마다 자동<br>장 마감 후 15:40: 종가 확정값으로 한 번<br>밤·주말: 마지막 값 그대로 (바뀔 게 없어서)","↻ 버튼을 눌러도 이 규칙대로 — 때가 안 됐으면 저장해 둔 값을 보여 줘요."],
+  u_debt:["🕒 빚투 받는 때","금융투자협회가 하루 한 번 발표 → 하루 두 번(09시 이후 · 17시 이후)만 확인해요.","그래서 낮에 몇 번을 열어도 서버에 다시 묻지 않아요."],
   /* 저녁 계기판 */
   c_0:["0단계 · 시장 필터","코스피가 크게 빠진 날(기준 이하)은 '쉬는 날'로 표시.","근거: 시장 전체가 무너진 날은 좋은 종목도 다음 날 같이 약한 경우가 많아서. 출처: KIS 코스피·코스닥 지수."],
   c_1:["1단계 · 낙폭과대 후보","오늘 적당히(기준 범위) 빠졌고 거래대금이 충분한 종목만 통과.","근거: 너무 조금 빠지면 기회가 아니고, 너무 많이 빠지면 진짜 악재일 수 있어서. 기준 숫자와 바꾼 이유는 📖 기준 보기 맨 아래에."],
