@@ -98,6 +98,36 @@ async function multiQuote(codes, mkt, auth) {
   return out;
 }
 
+// ── VKOSPI: 코드가 공개 문서에 없어서, KIS가 배포하는 지수 목록 파일에서 '변동성' 이름으로 찾음 ──
+const zlib = require("zlib");
+let vkCode = null;
+async function findVkospiCode() {
+  if (vkCode) return vkCode;
+  const r = await fetch("https://new.real.download.dws.co.kr/common/master/idxcode.mst.zip");
+  const buf = Buffer.from(await r.arrayBuffer());
+  if (buf.readUInt32LE(0) !== 0x04034b50) throw new Error("지수 목록 파일 형식 다름");
+  const method = buf.readUInt16LE(8), csize = buf.readUInt32LE(18);
+  const start = 30 + buf.readUInt16LE(26) + buf.readUInt16LE(28);
+  const body = buf.slice(start, start + csize);
+  const raw = method === 8 ? zlib.inflateRawSync(body) : body;
+  let text;
+  try { text = new TextDecoder("euc-kr").decode(raw); } catch (e) { text = raw.toString("latin1"); }
+  const line = text.split(/\r?\n/).find(l => /변동성/.test(l) && /200/.test(l)) || text.split(/\r?\n/).find(l => /변동성/.test(l));
+  if (!line) throw new Error("목록에 변동성지수 없음");
+  const m = line.match(/(\d{4,5})/);           // 줄 앞쪽 숫자: [구분 1자리] + 코드 4자리
+  if (!m) throw new Error("코드 해석 실패");
+  vkCode = m[1].slice(-4);
+  return vkCode;
+}
+async function getVkospi(auth) {
+  const code = await findVkospiCode();
+  const m = await kis("/uapi/domestic-stock/v1/quotations/inquire-index-price", "FHPUP02100000",
+    { FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: code }, auth);
+  const value = num(m.output.bstp_nmix_prpr);
+  if (!value || value < 3 || value > 200) throw new Error("값 확인 필요 (" + code + ")");
+  return { code, value, change: num(m.output.bstp_nmix_prdy_ctrt) };
+}
+
 module.exports = async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   const clean = v => (v || "").replace(/^["'\s]+|["'\s]+$/g, "").replace(/\s+/g, "");
@@ -135,6 +165,87 @@ module.exports = async (req, res) => {
       }
       rows.sort((a, b) => b.date.localeCompare(a.date));   // 최신 날짜가 맨 앞
       return res.status(200).json({ status: "ok", rows });
+    }
+
+    // ⭐ 빚투 현황 (금융투자협회 FreeSIS, 일별 · 1~2 영업일 늦게 발표): /api/closing?debt=1
+    //    ① 신용거래융자 잔고  ② 위탁매매 미수금 · 반대매매 금액 (증시자금추이)
+    //    열 순서가 공개 문서에 없어서, 합계·비율이 맞는지 스스로 검산한 뒤에만 이름을 붙임
+    if (qv("debt")) {
+      const from1y = kstYmd(new Date(Date.now() - 400 * 86400e3));
+      const freesis = async (obj) => {
+        const r = await fetch("http://freesis.kofia.or.kr/meta/getMetaDataList.do", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dmSearch: { OBJ_NM: obj, tmpV1: "D", tmpV40: "1000000", tmpV41: "1", tmpV45: from1y, tmpV46: today } }),
+        });
+        const j = await r.json();
+        return (j.ds1 || []).map(x => {
+          const o = { date: String(x.TMPV1 || "").replace(/\D/g, "") };
+          for (let k = 2; k <= 12; k++) { const v = x["TMPV" + k]; if (v != null && v !== "") o["v" + k] = Number(String(v).replace(/,/g, "")); }
+          return o;
+        }).filter(o => /^\d{8}$/.test(o.date)).sort((a, b) => b.date.localeCompare(a.date));
+      };
+      const near = (a, b, tol) => a != null && b != null && Math.abs(a - b) <= Math.max(Math.abs(b) * tol, 1);
+      const out = { status: "ok", credit: null, fund: null, notes: [] };
+      // ① 신용거래융자: v2 = 합계, v3 + v4 = 유가증권 + 코스닥 (합이 맞으면 시장별 이름도 붙임)
+      try {
+        const rows = await freesis("STATSCU0100000070BO");
+        if (rows.length) {
+          const split = rows.slice(0, 5).every(r => near(r.v3 + r.v4, r.v2, 0.002));
+          out.credit = rows.map(r => ({ date: r.date, total: r.v2, kospi: split ? r.v3 : null, kosdaq: split ? r.v4 : null }));
+          if (!split) out.notes.push("신용융자 시장별 열 확인 안 됨 → 합계만 표시");
+        }
+      } catch (e) { out.notes.push("신용융자: " + String(e.message).slice(0, 50)); }
+      // ② 증시자금추이: [예탁금, 파생예수금, RP, 미수금, 반대매매, 반대매매 비중%] 순서로 추정 → 비중 검산
+      try {
+        const rows = await freesis("STATSCU0100000060BO");
+        if (rows.length) {
+          // 어떤 열 조합이 '반대매매 ÷ 미수금 × 100 = 비중(%)' 을 만족하는지 찾기
+          let pick = null;
+          const keys = Object.keys(rows[0]).filter(k => k !== "date");
+          for (const m of keys) for (const f of keys) for (const pc of keys) {
+            if (m === f || f === pc || m === pc || pick) continue;
+            const ok = rows.slice(0, 5).filter(r => r[m] > 0).every(r => near(r[f] / r[m] * 100, r[pc], 0.02) && r[pc] < 100 && r[f] < r[m]);
+            if (ok && rows.slice(0, 5).some(r => r[m] > 0)) pick = { m, f, pc };
+          }
+          if (pick) out.fund = rows.map(r => ({ date: r.date, deposit: r.v2 ?? null, misu: r[pick.m], forced: r[pick.f], ratio: r[pick.pc] }));
+          else out.notes.push("미수금·반대매매 열 검산 실패 → 표시 안 함");
+        }
+      } catch (e) { out.notes.push("증시자금: " + String(e.message).slice(0, 50)); }
+      return res.status(200).json(out);
+    }
+
+    // ⭐ 아침 계기판 '한국 시장 체온': /api/closing?market=1
+    //    코스피 일별 약 330거래일 (200일선 그래프·7거래일 등락) + VKOSPI(코스피200 변동성지수) 현재값
+    if (qv("market")) {
+      const rows = [];
+      let end = today;
+      for (let k = 0; k < 10 && rows.length < 330; k++) {   // 120일 그래프에 200일선을 끝까지 그리려면 약 320일
+        const start = kstYmd(new Date(Date.UTC(+end.slice(0,4), +end.slice(4,6) - 1, +end.slice(6)) - 150 * 86400e3));
+        let d;
+        try {
+          d = await kis("/uapi/domestic-stock/v1/quotations/inquire-daily-indexchartprice", "FHKUP03500100",
+            { FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: "0001", FID_INPUT_DATE_1: start, FID_INPUT_DATE_2: end, FID_PERIOD_DIV_CODE: "D" }, auth);
+        } catch (e) { break; }
+        const got = (d.output2 || []).filter(x => x.stck_bsop_date && num(x.bstp_nmix_prpr))
+          .map(x => ({ date: x.stck_bsop_date, close: num(x.bstp_nmix_prpr), high: num(x.bstp_nmix_hgpr), low: num(x.bstp_nmix_lwpr) }));
+        const fresh = got.filter(x => !rows.some(r => r.date === x.date));
+        if (!fresh.length) break;
+        rows.push(...fresh);
+        const oldest = fresh.map(x => x.date).sort()[0];
+        end = kstYmd(new Date(Date.UTC(+oldest.slice(0,4), +oldest.slice(4,6) - 1, +oldest.slice(6)) - 86400e3 - 9 * 3600e3 + 9 * 3600e3));
+        await sleep(120);
+      }
+      rows.sort((a, b) => b.date.localeCompare(a.date));
+      // 오늘 장중이면 현재 지수도 맨 앞에
+      let now = null;
+      try {
+        const m = await kis("/uapi/domestic-stock/v1/quotations/inquire-index-price", "FHPUP02100000",
+          { FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: "0001" }, auth);
+        now = { value: num(m.output.bstp_nmix_prpr), change: num(m.output.bstp_nmix_prdy_ctrt) };
+      } catch (e) {}
+      let vkospi = null;
+      try { vkospi = await getVkospi(auth); } catch (e) { vkospi = { error: String(e.message).slice(0, 60) }; }
+      return res.status(200).json({ status: "ok", rows, now, vkospi });
     }
 
     // ⭐ 코스피 일별 지수 (시장 대비 강도 계산용): /api/closing?index=0001
