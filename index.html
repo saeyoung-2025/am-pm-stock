@@ -50,6 +50,11 @@
   .mk h3{font-size:15px;margin:2px 0 10px}
   .mk .upd{font-size:11px;color:var(--faint);margin:10px 0 0;text-align:right}
   .eco .tvcal{height:430px;margin:6px -6px 0} .eco .tvnews{height:420px;margin:0 -6px}
+  .tip.dictbtn{width:auto;height:auto;padding:3px 10px;border-radius:99px;font:600 11.5px/1.4 inherit;float:right;margin:0}
+  #tipBox table.dict{width:100%;border-collapse:collapse;font-size:12px;margin-top:4px}
+  #tipBox table.dict td{padding:4px 3px;border-bottom:1px solid #f0e9c9;vertical-align:top}
+  #tipBox table.dict td:first-child{width:44%;font-family:Nunito,sans-serif;color:#555;font-size:11.5px}
+  #tipBox .grp{display:block;margin:8px 0 2px;font-weight:700;color:#8a6d00}
   .eco .howread{font-size:12px;color:var(--sub);background:#f7f8fc;border-radius:8px;padding:6px 9px;margin:0 0 6px}
   .eco .trbtn{float:right;font-size:11.5px;font-weight:400;padding:3px 10px;border-radius:99px;background:var(--chip);color:var(--accent);text-decoration:none}
   .eco8 .e8{padding:8px 2px;border-bottom:1px dashed var(--line)}
@@ -525,12 +530,10 @@ const ECO_NAMES = [
   ["e_retail","Retail Sales","소매판매"], ["e_pce","Core PCE Price Index","PCE 물가 (근원)"], ["e_fomc","Fed Funds Tgt Rate / FOMC","미국 기준금리"],
 ];
 function ecoHTML(){
-  return `<div class="card eco"><h3 style="font-size:15px;margin:2px 0 8px">${tipHTML("m_eco")}📅 경제 일정 <small style="font-weight:400;color:var(--faint);font-size:11px">미국 · 중요도 높음만 · 한국 시간</small></h3>
+  return `<div class="card eco"><h3 style="font-size:15px;margin:2px 0 8px">${tipHTML("m_eco")}📅 경제 일정 <small style="font-weight:400;color:var(--faint);font-size:11px">미국 · 중요도 높음만 · 한국 시간</small>
+      <i class="tip dictbtn" data-tip="m_dict">📖 영어 → 한글 사전</i></h3>
     <p class="howread">${tipHTML("m_ecoread")}<b>발</b> = 실제 발표값 · <b>예</b> = 예상 · <b>이</b> = 이전 — <b>발이 예보다 높은지 낮은지</b>가 핵심</p>
     <div class="tvcal" id="tvCal"></div>
-    <details><summary>📖 영어 지표 이름 풀이 (꼭 볼 8개)</summary>
-      <table>${ECO_NAMES.map(([k, en, ko]) => `<tr><td>${tipHTML(k)}${ko}</td><td>${en}</td></tr>`).join("")}</table>
-    </details>
     <div class="links">
       <a href="https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html" target="_blank" rel="noopener">🎯 금리 확률 (FedWatch)</a>
       <a href="https://kr.investing.com/economic-calendar/" target="_blank" rel="noopener">📅 인베스팅 경제캘린더 (한글)</a>
@@ -1023,6 +1026,7 @@ const UPDATE_LOG = [
   { date:"2026.10.15", tab:"morning", items:[
     ["주제별 갱신 시점", "자료가 실제로 바뀌는 때에만 새로 받기: 체온·VKOSPI는 장중 10분마다·장 마감 후 한 번, 빚투는 하루 두 번. 각 코너 아래 🕒 줄에 받은 시각과 다음 갱신 시점 표시."],
     ["VKOSPI (한국형 공포지수)", "기사에서 'VKOSPI 50 돌파'가 공포 신호로 쓰여서. 미국 VIX의 한국판이라 한국장 분위기에 더 직접적."],
+    ["📖 영어 → 한글 지표 사전", "캘린더 지표 이름이 영어라 낯설어서. 자주 나오는 35개를 분야별로 정리, 꼭 볼 8개는 ⭐ 표시."],
     ["경제 일정 간추림 · 번역 버튼", "일정이 너무 많아서 미국 '중요도 높음'만. 실제 발표값(발)이 바로 보이는 TradingView 캘린더 하나로. 영어 지표 이름 풀이 8개 + 뉴스 🌐 번역해서 보기 버튼."],
     ["📅 경제 일정 · 📰 뉴스", "CPI 같은 발표가 다음 날 한국장에 큰 영향을 줘서. 일정 + '예상보다 높으면 어떻게 되나' 읽는 법 + 금리 확률(FedWatch) 바로가기."],
     ["💳 빚투 현황", "반대매매·미수금·신용융자가 급증한다는 기사를 보고. 빚으로 산 물량이 강제로 팔리면 하락이 더 커지니 '숨은 위험'으로 확인."],
@@ -1590,6 +1594,7 @@ const TIPS = {
   e_pce:["PCE 물가 (근원)","연준이 공식 목표(연 2%)로 쓰는 물가 지표.","CPI보다 늦게 나오지만, 연준의 금리 판단에 직접 쓰여요. 높으면 금리 부담."],
   e_fomc:["FOMC 기준금리","미국 연준이 금리를 정하는 회의 결과 (약 6주마다, 한국 시간 새벽 3시쯤).","결정 자체보다 '앞으로의 말투'에 시장이 더 반응해요. 금리 확률은 아래 FedWatch 바로가기에서."],
   m_eco:["📅 경제 일정","미국의 '중요도 높음' 발표만 골라서 보여 줘요 (한국 시간). 발표되면 몇 분 안에 '발:' 칸에 실제 숫자가 채워져요.","출처: TradingView 무료 위젯. 아래 '영어 지표 이름 풀이'에서 8개 핵심 지표의 뜻을 볼 수 있어요."],
+  m_dict:["📖 영어 → 한글 지표 사전","⭐ = 꼭 볼 8개. 캘린더에서 낯선 이름이 나오면 여기서 찾아보세요.<span class=\"grp\">물가</span><table class=\"dict\"><tr><td>CPI m/m · y/y</td><td>⭐ 소비자물가 (전월비 · 전년비). 높으면 금리 부담 → 주가 약세</td></tr><tr><td>Core CPI</td><td>⭐ 근원 소비자물가 (에너지·식품 제외). 연준이 더 중요하게 봄</td></tr><tr><td>PPI · Core PPI</td><td>⭐ 생산자물가. CPI 미리보기</td></tr><tr><td>PCE Price Index · Core PCE</td><td>⭐ 연준 공식 목표 물가 (연 2%)</td></tr><tr><td>Import Prices</td><td>수입물가</td></tr></table><span class=\"grp\">고용</span><table class=\"dict\"><tr><td>Non Farm Payrolls (NFP)</td><td>⭐ 비농업 고용 (새 일자리 수). 너무 강해도·약해도 부담</td></tr><tr><td>Unemployment Rate</td><td>⭐ 실업률. 갑자기 오르면 경기 걱정</td></tr><tr><td>Initial Jobless Clm</td><td>신규 실업수당 청구 (매주 목요일). 늘면 고용 약화</td></tr><tr><td>Continuing Jobless Claims</td><td>계속 실업수당 청구</td></tr><tr><td>Average Hourly Earnings</td><td>평균 시간당 임금. 높으면 물가 걱정</td></tr><tr><td>ADP Employment Change</td><td>ADP 민간 고용 (NFP 이틀 전 미리보기)</td></tr><tr><td>JOLTS Job Openings</td><td>구인 건수</td></tr></table><span class=\"grp\">경기 · 소비</span><table class=\"dict\"><tr><td>ISM Manufacturing PMI</td><td>⭐ ISM 제조업지수. 50 위 = 확장, 아래 = 위축</td></tr><tr><td>ISM Services PMI</td><td>ISM 서비스업지수</td></tr><tr><td>S&P Global Mfg / Svcs / Comp PMI Flash</td><td>S&P 제조업 / 서비스업 / 종합 PMI 속보치</td></tr><tr><td>Retail Sales · ex Autos</td><td>⭐ 소매판매 · 자동차 제외 소매판매</td></tr><tr><td>GDP Growth Rate QoQ Adv</td><td>GDP 성장률 (전분기비, 속보치)</td></tr><tr><td>Personal Income / Spending</td><td>개인소득 / 개인소비</td></tr><tr><td>Durable Goods Orders</td><td>내구재 주문 (오래 쓰는 물건 주문)</td></tr><tr><td>Industrial Production</td><td>산업생산</td></tr><tr><td>Michigan Consumer Sentiment</td><td>미시간대 소비자심리지수</td></tr><tr><td>CB Consumer Confidence</td><td>컨퍼런스보드 소비자신뢰지수</td></tr><tr><td>NY Empire State · Philly Fed</td><td>뉴욕 · 필라델피아 지역 제조업지수</td></tr></table><span class=\"grp\">주택</span><table class=\"dict\"><tr><td>Housing Starts · Building Permits</td><td>주택 착공 · 건축 허가</td></tr><tr><td>Existing / New Home Sales</td><td>기존 / 신규 주택 판매</td></tr></table><span class=\"grp\">금리 · 연준</span><table class=\"dict\"><tr><td>Fed Funds Tgt Rate</td><td>⭐ 미국 기준금리 (FOMC 결정)</td></tr><tr><td>FOMC Minutes</td><td>FOMC 회의록 (3주 뒤 공개)</td></tr><tr><td>Fed Chair ○○ Speech</td><td>연준 의장 연설</td></tr><tr><td>10-Year Note Auction</td><td>10년 국채 입찰</td></tr></table><span class=\"grp\">기타</span><table class=\"dict\"><tr><td>Trade Balance</td><td>무역수지</td></tr><tr><td>Crude Oil Inventories</td><td>원유 재고</td></tr></table><span class=\"grp\">이름 뒤에 붙는 말</span><table class=\"dict\"><tr><td>m/m · y/y · q/q</td><td>전월 대비 · 전년 대비 · 전분기 대비</td></tr><tr><td>Flash · Prel · Adv</td><td>속보치 · 잠정치 (먼저 나오는 숫자)</td></tr><tr><td>Final · 2nd · 3rd</td><td>확정치 · 2차 · 3차 수정치</td></tr><tr><td>sa · nsa</td><td>계절조정 · 계절조정 안 함</td></tr></table>","⭐ 없는 건 크게 신경 쓰지 않아도 돼요. 시장을 크게 움직이는 건 대부분 ⭐ 8개."],
   m_ecoread:["발 · 예 · 이 읽는 법","<b>발</b> = 실제 발표값, <b>예</b> = 전문가 예상, <b>이</b> = 지난번 값.<br>예: CPI 발 0.5% · 예 0.3% → 예상보다 물가가 높음 → 금리 부담 → 주가·원화 약세 쪽.","숫자 자체보다 '예상과의 차이'가 시장을 움직여요."],
   m_news:["📰 시장 뉴스 · 번역","TradingView가 모아 주는 해외 시장 뉴스 (영어). 위젯 안 글은 앱이 직접 번역할 수 없어요 (다른 회사 화면이라).","🌐 번역해서 보기를 누르면 TradingView 뉴스 페이지를 구글 번역으로 한국어로 열어요. 기사 하나를 열었을 때는 크롬 주소창 오른쪽 번역 아이콘(또는 오른쪽 클릭 → 한국어로 번역)을 쓰세요."],
   d_debt:["💳 빚투 현황","빚을 내서 주식을 산 규모. 주가가 빠질 때 강제 매도(반대매매)로 하락을 더 키울 수 있어 '시장의 숨은 위험'으로 봐요.","출처: 금융투자협회 FreeSIS 일별 통계 (무료). 1~2 영업일 늦게 발표. 3시간마다 새로 받아요."],
