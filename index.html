@@ -49,7 +49,24 @@
   .msci-card{display:flex;align-items:center;padding:6px}
   .mk h3{font-size:15px;margin:2px 0 10px}
   .mk .upd{font-size:11px;color:var(--faint);margin:10px 0 0;text-align:right}
-  .eco .tvcal{height:430px;margin:0 -6px} .eco .tvnews{height:420px;margin:0 -6px}
+  .eco .tvcal{height:430px;margin:6px -6px 0} .eco .tvnews{height:420px;margin:0 -6px}
+  .eco .howread{font-size:12px;color:var(--sub);background:#f7f8fc;border-radius:8px;padding:6px 9px;margin:0 0 6px}
+  .eco .trbtn{float:right;font-size:11.5px;font-weight:400;padding:3px 10px;border-radius:99px;background:var(--chip);color:var(--accent);text-decoration:none}
+  .eco8 .e8{padding:8px 2px;border-bottom:1px dashed var(--line)}
+  .eco8 .e8:last-child{border-bottom:none}
+  .eco8 .t{display:flex;align-items:center;gap:4px;font-size:13.5px}
+  .eco8 .t span{margin-left:auto;font-size:12px;color:var(--sub);text-align:right}
+  .eco8 small{display:block;font-size:11.5px;color:var(--faint);margin:2px 0 0 19px}
+  .eco8 small b{color:var(--ink,#222)}
+  .eco8 .none{color:var(--faint)} .eco8 .ok{color:#2f855a;font-size:11px} .eco8 .hot{color:#c0392b;font-size:11px}
+  .eco8 .soon{background:#fff6e5;border-radius:8px;padding-left:6px;padding-right:6px}
+  .eco8 .done{opacity:.7}
+  .news{list-style:none;margin:0;padding:0}
+  .news li{padding:8px 0;border-bottom:1px dashed var(--line)}
+  .news li:last-child{border-bottom:none}
+  .news a{color:var(--ink,#222);text-decoration:none;font-size:13.5px;line-height:1.5}
+  .news a:hover{text-decoration:underline}
+  .news small{display:block;font-size:11px;color:var(--faint);margin-top:2px}
   .eco details{margin-top:10px;border-top:1px dashed var(--line);padding-top:8px}
   .eco summary{cursor:pointer;font-size:13px;font-weight:700;color:var(--accent)}
   .eco table{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
@@ -501,40 +518,36 @@ function tvEmbed(el, file, cfg){
   const sc = document.createElement("script"); sc.src = "https://s3.tradingview.com/external-embedding/" + file; sc.async = true;
   sc.innerHTML = JSON.stringify(cfg); box.appendChild(sc); el.innerHTML = ""; el.appendChild(box);
 }
-const ECO_GUIDE = [
-  ["CPI (소비자물가)", "미국 물가. <b>예상보다 높으면</b> → 금리 인하 기대 ↓ (인상 가능성 ↑) → 달러 강세 · 주가 부담 · 원화 약세. 낮으면 반대."],
-  ["Core CPI (근원물가)", "에너지·식품을 뺀 물가. 연준이 더 중요하게 봐요. 해석은 CPI와 같음."],
-  ["PCE (개인소비지출 물가)", "연준이 공식 목표(2%)로 쓰는 물가. 높으면 금리 부담."],
-  ["비농업 고용 · 실업률", "고용이 <b>너무 강하면</b> 물가 걱정 → 금리 부담. 너무 약하면 경기 걱정. '적당히 식는 중'이 주식엔 가장 좋음."],
-  ["FOMC (미국 금리 결정)", "연준이 금리를 정하는 회의 (약 6주마다). 결정보다 <b>앞으로의 말투</b>(매파=긴축, 비둘기파=완화)에 시장이 더 크게 반응."],
-  ["GDP · 소매판매", "경기 성적표. 너무 약하면 경기침체 걱정, 너무 강하면 금리 걱정."],
-  ["한국은행 금통위", "한국 기준금리 결정. 인하 → 보통 주식에 우호적이지만 원화 약세 요인."],
+/* 영문 캘린더 읽는 법: 지표 이름 풀이 (8개) */
+const ECO_NAMES = [
+  ["e_ism","ISM Manufacturing PMI","ISM 제조업지수"], ["e_cpi","CPI / Core CPI","소비자물가 · 근원물가"],
+  ["e_ppi","PPI","생산자물가"], ["e_nfp","Non-Farm Payrolls","비농업 고용"], ["e_unemp","Unemployment Rate","실업률"],
+  ["e_retail","Retail Sales","소매판매"], ["e_pce","Core PCE Price Index","PCE 물가 (근원)"], ["e_fomc","Fed Funds Tgt Rate / FOMC","미국 기준금리"],
 ];
 function ecoHTML(){
-  return `<div class="card eco"><h3 style="font-size:15px;margin:2px 0 8px">${tipHTML("m_eco")}📅 경제 일정 <small style="font-weight:400;color:var(--faint);font-size:11px">미국·한국 · 중요도 중↑</small></h3>
+  return `<div class="card eco"><h3 style="font-size:15px;margin:2px 0 8px">${tipHTML("m_eco")}📅 경제 일정 <small style="font-weight:400;color:var(--faint);font-size:11px">미국 · 중요도 높음만 · 한국 시간</small></h3>
+    <p class="howread">${tipHTML("m_ecoread")}<b>발</b> = 실제 발표값 · <b>예</b> = 예상 · <b>이</b> = 이전 — <b>발이 예보다 높은지 낮은지</b>가 핵심</p>
     <div class="tvcal" id="tvCal"></div>
-    <details><summary>📖 주요 지표, 이렇게 읽어요</summary>
-      <table>${ECO_GUIDE.map(([a, b]) => `<tr><td>${a}</td><td>${b}</td></tr>`).join("")}</table>
-      <p style="font-size:11.5px;color:var(--faint);margin-top:6px">💡 핵심은 <b>'예상치와의 차이'</b>. 결과가 좋아도 예상보다 못하면 주가가 빠질 수 있어요.</p>
+    <details><summary>📖 영어 지표 이름 풀이 (꼭 볼 8개)</summary>
+      <table>${ECO_NAMES.map(([k, en, ko]) => `<tr><td>${tipHTML(k)}${ko}</td><td>${en}</td></tr>`).join("")}</table>
     </details>
     <div class="links">
       <a href="https://www.cmegroup.com/markets/interest-rates/cme-fedwatch-tool.html" target="_blank" rel="noopener">🎯 금리 확률 (FedWatch)</a>
-      <a href="https://m.stock.naver.com/news" target="_blank" rel="noopener">📰 네이버 증권 뉴스</a>
-      <a href="https://kr.investing.com/economic-calendar/" target="_blank" rel="noopener">📅 인베스팅 경제캘린더</a>
+      <a href="https://kr.investing.com/economic-calendar/" target="_blank" rel="noopener">📅 인베스팅 경제캘린더 (한글)</a>
     </div>
-    <h3 style="font-size:15px;margin:16px 0 8px">${tipHTML("m_news")}📰 시장 뉴스</h3>
+    <h3 style="font-size:15px;margin:16px 0 8px">${tipHTML("m_news")}📰 시장 뉴스
+      <a class="trbtn" href="https://www-tradingview-com.translate.goog/news/?_x_tr_sl=en&_x_tr_tl=ko&_x_tr_hl=ko" target="_blank" rel="noopener">🌐 번역해서 보기</a></h3>
     <div class="tvnews" id="tvNews"></div></div>`;
 }
 function renderEco(){
   const el = document.getElementById("ecoCal"); if (!el) return;
   el.innerHTML = ecoHTML();
   tvEmbed(document.getElementById("tvCal"), "embed-widget-events.js",
-    { colorTheme:"light", isTransparent:true, width:"100%", height:"100%", locale:"kr", importanceFilter:"0,1", countryFilter:"us,kr" });
+    { colorTheme:"light", isTransparent:true, width:"100%", height:"100%", locale:"kr", importanceFilter:"1", countryFilter:"us" });
   tvEmbed(document.getElementById("tvNews"), "embed-widget-timeline.js",
     { feedMode:"all_symbols", isTransparent:true, displayMode:"regular", width:"100%", height:"100%", colorTheme:"light", locale:"kr" });
 }
 
-const warnLines = arr => arr.map(t => { const m = t.match(/^@(\w+)@/); return (m ? tipHTML(m[1]) : "") + "⚠️ " + t.replace(/^@\w+@/, ""); }).join("<br>");
 /* ── 💳 빚투 현황 (금융투자협회 FreeSIS, 일별) ── */
 let DEBT = null;
 const won6 = v => {   // 백만원 → 조·억
@@ -1010,6 +1023,7 @@ const UPDATE_LOG = [
   { date:"2026.10.15", tab:"morning", items:[
     ["주제별 갱신 시점", "자료가 실제로 바뀌는 때에만 새로 받기: 체온·VKOSPI는 장중 10분마다·장 마감 후 한 번, 빚투는 하루 두 번. 각 코너 아래 🕒 줄에 받은 시각과 다음 갱신 시점 표시."],
     ["VKOSPI (한국형 공포지수)", "기사에서 'VKOSPI 50 돌파'가 공포 신호로 쓰여서. 미국 VIX의 한국판이라 한국장 분위기에 더 직접적."],
+    ["경제 일정 간추림 · 번역 버튼", "일정이 너무 많아서 미국 '중요도 높음'만. 실제 발표값(발)이 바로 보이는 TradingView 캘린더 하나로. 영어 지표 이름 풀이 8개 + 뉴스 🌐 번역해서 보기 버튼."],
     ["📅 경제 일정 · 📰 뉴스", "CPI 같은 발표가 다음 날 한국장에 큰 영향을 줘서. 일정 + '예상보다 높으면 어떻게 되나' 읽는 법 + 금리 확률(FedWatch) 바로가기."],
     ["💳 빚투 현황", "반대매매·미수금·신용융자가 급증한다는 기사를 보고. 빚으로 산 물량이 강제로 팔리면 하락이 더 커지니 '숨은 위험'으로 확인."],
     ["🌡 한국 시장 체온 (맨 아래)", "7거래일 등락·고점 대비 낙폭·200일선 이탈을 한눈에. 기사·골드만삭스가 쓰는 기준을 숫자와 그래프로."],
@@ -1567,8 +1581,17 @@ const TIPS = {
   m_7d:["최근 7거래일","막대 하나 = 하루 등락률(%). 빨강 = 상승, 파랑 = 하락. 합계 = 7거래일 누적 등락.","'몇 일 빠졌나'보다 '얼마나 깊게 빠졌나'가 중요해요 (골드만삭스도 하락 일수보다 압축된 낙폭에 주목)."],
   m_dd:["고점 대비 낙폭","최근 60거래일 중 가장 높았던 종가에서 지금까지 몇 % 내려왔나.","−5% 안팎 = 흔한 조정, −10% 넘으면 큰 조정, −20%면 하락장으로 봐요."],
   m_200:["200일선 (장기 추세선)","최근 200거래일(약 10개월) 종가의 평균. 지수가 이 선 위면 장기 상승, 아래면 장기 추세가 흔들리는 중. 그래프의 주황 점선.","아래로 내려간 기간이 길어지면 추세 추종 자금·손실 한도 관리 투자자의 매도가 늘 수 있어요."],
-  m_eco:["📅 경제 일정","미국·한국의 중요 경제 발표 일정과 결과 (실제치 · 예상치 · 이전치). 시간은 한국 시간.","'예상치'와 '실제치'의 차이가 시장을 움직여요. 아래 📖 주요 지표 읽는 법 참고. 출처: TradingView 무료 위젯."],
-  m_news:["📰 시장 뉴스","TradingView가 모아 주는 시장 뉴스 (한국어·영어 섞여 나올 수 있음).","한국 종목 뉴스는 위 '네이버 증권 뉴스' 바로가기가 더 자세해요."],
+  e_ism:["ISM 제조업지수","미국 공장 경기 체감 점수. <b>50 위 = 좋아지는 중, 50 아래 = 나빠지는 중</b>.","한국은 수출·반도체 비중이 커서 미국 제조업이 좋으면 한국 증시에도 보통 좋은 신호."],
+  e_cpi:["소비자물가 (CPI)","미국 물가가 지난달보다 얼마나 올랐나. 근원 = 에너지·식품 뺀 것 (연준이 더 중요하게 봐요).","<b>예상보다 높으면</b> → 금리 인하 멀어짐 → 주가·원화 약세. 낮으면 반대. 가장 큰 영향을 주는 지표예요."],
+  e_ppi:["생산자물가 (PPI)","기업이 물건 만들 때 드는 비용의 변화. 시간이 지나면 소비자물가로 옮겨 가요.","CPI 미리보기 정도로 보면 돼요. 높으면 물가 걱정 ↑."],
+  e_nfp:["비농업 고용","지난달 미국에서 새로 생긴 일자리 수 (농업 제외).","<b>너무 많으면</b> 경기 과열 → 금리 부담, <b>너무 적으면</b> 경기 걱정. '적당히 식는 중'이 주식엔 가장 좋아요."],
+  e_unemp:["실업률","일하고 싶은데 일자리가 없는 사람의 비율.","갑자기 오르면 경기 침체 걱정 ↑. 금리 인하 기대는 커질 수 있어요."],
+  e_retail:["소매판매","미국 사람들이 지난달 물건을 얼마나 샀나. 미국 경제의 약 70%가 소비예요.","강하면 경기 좋음(대신 금리 부담), 약하면 경기 둔화 걱정."],
+  e_pce:["PCE 물가 (근원)","연준이 공식 목표(연 2%)로 쓰는 물가 지표.","CPI보다 늦게 나오지만, 연준의 금리 판단에 직접 쓰여요. 높으면 금리 부담."],
+  e_fomc:["FOMC 기준금리","미국 연준이 금리를 정하는 회의 결과 (약 6주마다, 한국 시간 새벽 3시쯤).","결정 자체보다 '앞으로의 말투'에 시장이 더 반응해요. 금리 확률은 아래 FedWatch 바로가기에서."],
+  m_eco:["📅 경제 일정","미국의 '중요도 높음' 발표만 골라서 보여 줘요 (한국 시간). 발표되면 몇 분 안에 '발:' 칸에 실제 숫자가 채워져요.","출처: TradingView 무료 위젯. 아래 '영어 지표 이름 풀이'에서 8개 핵심 지표의 뜻을 볼 수 있어요."],
+  m_ecoread:["발 · 예 · 이 읽는 법","<b>발</b> = 실제 발표값, <b>예</b> = 전문가 예상, <b>이</b> = 지난번 값.<br>예: CPI 발 0.5% · 예 0.3% → 예상보다 물가가 높음 → 금리 부담 → 주가·원화 약세 쪽.","숫자 자체보다 '예상과의 차이'가 시장을 움직여요."],
+  m_news:["📰 시장 뉴스 · 번역","TradingView가 모아 주는 해외 시장 뉴스 (영어). 위젯 안 글은 앱이 직접 번역할 수 없어요 (다른 회사 화면이라).","🌐 번역해서 보기를 누르면 TradingView 뉴스 페이지를 구글 번역으로 한국어로 열어요. 기사 하나를 열었을 때는 크롬 주소창 오른쪽 번역 아이콘(또는 오른쪽 클릭 → 한국어로 번역)을 쓰세요."],
   d_debt:["💳 빚투 현황","빚을 내서 주식을 산 규모. 주가가 빠질 때 강제 매도(반대매매)로 하락을 더 키울 수 있어 '시장의 숨은 위험'으로 봐요.","출처: 금융투자협회 FreeSIS 일별 통계 (무료). 1~2 영업일 늦게 발표. 3시간마다 새로 받아요."],
   d_credit:["신용거래융자 잔고","증권사에서 돈을 빌려 주식을 산 금액의 합계. 빌린 기간은 보통 수개월.","잔고가 많을수록 주가 하락 시 담보 부족 → 강제 매도 위험 ↑. 최근 1년 그래프의 끝이 높으면 과열 신호."],
   d_misu:["위탁매매 미수금 · 반대매매","<b>미수금</b>: 주식을 사고 결제일(이틀 뒤)까지 돈을 다 못 넣은 금액 = 초단기 빚투.<br><b>반대매매</b>: 기한 안에 돈을 못 넣어 증권사가 강제로 판 금액.","반대매매가 급증하면 '빚으로 산 물량이 시장에 쏟아지는 중' → 하락이 더 깊어질 수 있어요. 막대그래프가 갑자기 높아지는지 보세요."],
