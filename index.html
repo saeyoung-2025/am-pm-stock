@@ -1658,7 +1658,8 @@ function renderPhone(){
   const el = document.getElementById("phoneCard"); if (!el) return;
   const p = PUSH;
   const step = (ok, t) => `<li class="${ok ? "ok" : ""}">${ok ? "✅" : "⬜"} ${t}</li>`;
-  const ready = p && p.store && p.ntfy && p.cron;
+  const cronOn = !!(p && (p.lastRun || p.ping));   // 예약이 실제로 한 번이라도 서버를 깨웠나
+  const ready = p && p.store && p.ntfy && cronOn;
   const synced = store.get("mm_push_synced", null);
   el.innerHTML = `<div class="wl-alert-top"><b>${tipHTML("ph")}📱 휴대폰 알림 <small style="font-weight:400;color:var(--faint)">앱을 닫아도</small></b>
       ${p && p.ntfy ? `<button class="pill-btn" id="phTest">테스트 보내기</button>` : ""}</div>
@@ -1666,9 +1667,9 @@ function renderPhone(){
     <ul class="phsteps">
       ${step(p.ntfy, `${tipHTML("ph1")}① 휴대폰에 <b>ntfy</b> 앱 설치 + 주제 구독${p.topic ? ` <code>${esc(p.topic)}</code>` : ""}`)}
       ${step(p.store, `${tipHTML("ph2")}② Vercel에서 무료 저장소(Upstash Redis) 연결`)}
-      ${step(p.cron, `${tipHTML("ph3")}③ cron-job.org에서 10분마다 확인 예약`)}
+      ${step(cronOn, `${tipHTML("ph3")}③ cron-job.org에서 10분마다 확인 예약${cronOn ? "" : p.cron ? " <small>(비밀 글자 OK · 예약 기다리는 중)</small>" : ""}`)}
     </ul>
-    <p>${ready ? `✅ 켜짐 · 서버에 ${p.count ?? 0}종목 저장됨${synced ? ` (${new Date(synced).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} 보냄)` : ""}<br><small>마지막 확인: ${p.lastRun ? esc(p.lastRun) : "아직 없음"}</small>`
+    <p>${ready ? `✅ 켜짐 · 서버에 ${p.count ?? 0}종목 저장됨${synced ? ` (${new Date(synced).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} 보냄)` : ""}<br><small>마지막 장중 확인: ${p.lastRun ? esc(p.lastRun) : "아직 없음"}${p.ping ? ` · 장 밖 호출 ${esc(p.ping)}` : ""}</small>`
       : `설정이 끝나면 장중(09:00~15:30) 10분마다 서버가 대신 확인해서 <b>손절선 · 손절 절반 · 목표 · 하루 등락 기준</b>에 닿으면 휴대폰으로 알려 줘요.`}</p>
     ${p.storeError ? `<p class="errinfo">${esc(p.storeError)}</p>` : ""}`}`;
   const b = document.getElementById("phTest");
