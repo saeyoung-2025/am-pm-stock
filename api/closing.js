@@ -128,6 +128,26 @@ async function getVkospi(auth) {
   return { code, value, change: num(m.output.bstp_nmix_prdy_ctrt) };
 }
 
+// ── 📱 휴대폰 알림: 저장소(Upstash Redis, Vercel Storage에서 무료 생성) + ntfy(무료 알림 앱) ──
+//   환경변수: KV_REST_API_URL / KV_REST_API_TOKEN (또는 UPSTASH_REDIS_REST_URL / _TOKEN) · NTFY_TOPIC · ALERT_TOKEN
+const R_URL = () => (process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL || "").trim();
+const R_TOK = () => (process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN || "").trim();
+async function redis(...cmd) {
+  if (!R_URL() || !R_TOK()) throw new Error("저장소 미설정");
+  const r = await fetch(R_URL(), { method: "POST", headers: { authorization: `Bearer ${R_TOK()}`, "content-type": "application/json" }, body: JSON.stringify(cmd) });
+  const j = await r.json();
+  if (j.error) throw new Error("저장소: " + j.error);
+  return j.result;
+}
+async function ntfy(title, message, opt = {}) {
+  const topic = (process.env.NTFY_TOPIC || "").trim();
+  if (!topic) throw new Error("NTFY_TOPIC 미설정");
+  const r = await fetch("https://ntfy.sh/", { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ topic, title, message, priority: opt.priority || 4, tags: opt.tags || [], click: opt.click || "https://am-pm-stock.vercel.app/" }) });
+  if (!r.ok) throw new Error("ntfy " + r.status);
+}
+const kstNow = () => { const d = new Date(Date.now() + 9 * 3600e3); return { ymd: d.toISOString().slice(0, 10).replace(/-/g, ""), min: d.getUTCHours() * 60 + d.getUTCMinutes(), wd: d.getUTCDay() }; };
+
 module.exports = async (req, res) => {
   res.setHeader("Cache-Control", "no-store");
   const clean = v => (v || "").replace(/^["'\s]+|["'\s]+$/g, "").replace(/\s+/g, "");
@@ -136,7 +156,9 @@ module.exports = async (req, res) => {
   const pass = (process.env.APP_PASSWORD || "").trim();
 
   if (!key || !secret) return res.status(200).json({ status: "not_configured" });
-  if (pass && (req.headers["x-app-password"] || "").trim() !== pass) return res.status(401).json({ status: "unauthorized" });
+  const alertTok = (process.env.ALERT_TOKEN || "").trim();
+  const isCron = !!(alertTok && req.query && String(req.query.alert || "") === alertTok);
+  if (!isCron && pass && (req.headers["x-app-password"] || "").trim() !== pass) return res.status(401).json({ status: "unauthorized" });
 
   try {
     const auth = { key, secret, token: await getToken(key, secret) };
@@ -165,6 +187,79 @@ module.exports = async (req, res) => {
       }
       rows.sort((a, b) => b.date.localeCompare(a.date));   // 최신 날짜가 맨 앞
       return res.status(200).json({ status: "ok", rows });
+    }
+
+    // ⭐ 📱 휴대폰 알림 상태: /api/closing?push=status
+    if (qv("push") === "status") {
+      const st = { status: "ok", store: !!(R_URL() && R_TOK()), ntfy: !!(process.env.NTFY_TOPIC || "").trim(), cron: !!alertTok, topic: (process.env.NTFY_TOPIC || "").trim() || null };
+      try { if (st.store) { st.count = JSON.parse((await redis("GET", "amp:watch")) || "[]").length; st.lastRun = await redis("GET", "amp:lastrun"); } } catch (e) { st.storeError = String(e.message).slice(0, 60); }
+      return res.status(200).json(st);
+    }
+    // ⭐ 📱 보유·관심 목록 서버에 저장 (앱이 자동으로 보냄): POST /api/closing?push=sync
+    if (qv("push") === "sync") {
+      const list = (Array.isArray(req.body && req.body.watch) ? req.body.watch : []).filter(w => /^\d{6}$/.test(w.code)).slice(0, 30)
+        .map(w => ({ code: w.code, name: String(w.name || w.code).slice(0, 20), on: w.on !== false, th: +w.th || 5, dir: w.dir || "both",
+          buy: +w.buy || null, stop: +w.stop || -7, take: +w.take || 10 }));
+      await redis("SET", "amp:watch", JSON.stringify(list));
+      return res.status(200).json({ status: "ok", saved: list.length });
+    }
+    // ⭐ 📱 테스트 알림: /api/closing?push=test
+    if (qv("push") === "test") {
+      await ntfy("am-pm 테스트 알림 ✅", "휴대폰 알림이 잘 연결됐어요. 장중(09:00~15:30)에 손절·목표·등락 기준에 닿으면 이렇게 알려 드려요.", { tags: ["white_check_mark"] });
+      return res.status(200).json({ status: "ok" });
+    }
+    // ⭐ 📱 예약 확인 (cron-job.org 가 10분마다 호출): /api/closing?alert=<ALERT_TOKEN>
+    if (isCron) {
+      const k = kstNow();
+      if (k.wd === 0 || k.wd === 6 || k.min < 540 || k.min > 935) return res.status(200).json({ status: "ok", skipped: "장 시간 아님" });
+      const list = JSON.parse((await redis("GET", "amp:watch")) || "[]").filter(w => w.on);
+      if (!list.length) return res.status(200).json({ status: "ok", skipped: "목록 없음" });
+      const q = await multiQuote(list.map(w => w.code), "J", auth);
+      const sent = [];
+      for (const w of list) {
+        const x = q[w.code]; if (!x || !x.price) continue;
+        const hits = [];
+        if (w.buy) {
+          const my = (x.price / w.buy - 1) * 100;
+          if (my <= w.stop) hits.push(["stop", `🚨 손절선 ${w.stop}% 도달`, `지금 ${x.price.toLocaleString()}원 · 내 수익률 ${my.toFixed(1)}%\n'지금 이 가격에 새로 사겠나?' 아니라면 정리할 때예요.`, 5]);
+          else if (my <= w.stop / 2) hits.push(["warn", `⚠️ 손절선 절반`, `지금 ${x.price.toLocaleString()}원 · 내 수익률 ${my.toFixed(1)}%\n왜 빠지는지 뉴스·공시를 확인해 두세요.`, 4]);
+          if (my >= w.take) hits.push(["take", `🎯 목표 +${w.take}% 도달`, `지금 ${x.price.toLocaleString()}원 · 내 수익률 +${my.toFixed(1)}%\n전부 또는 절반 팔아 수익 지키기.`, 4]);
+        }
+        const ch = x.change;
+        if (ch != null && Math.abs(ch) >= w.th && (w.dir === "both" || (w.dir === "up" && ch > 0) || (w.dir === "down" && ch < 0)))
+          hits.push(["th", `🔔 오늘 ${ch > 0 ? "+" : ""}${ch.toFixed(2)}%`, `지금 ${x.price.toLocaleString()}원 · 하루 기준 ${w.th}%를 넘었어요.`, 3]);
+        for (const [kind, title, msg, pr] of hits) {
+          const ok = await redis("SET", `amp:sent:${k.ymd}:${w.code}:${kind}`, "1", "NX", "EX", 90000);   // 같은 종목·같은 신호는 하루 한 번
+          if (ok !== "OK") continue;
+          await ntfy(`${w.name} · ${title}`, msg, { priority: pr, click: `https://m.stock.naver.com/domestic/stock/${w.code}/total` });
+          sent.push(`${w.name}:${kind}`);
+        }
+      }
+      await redis("SET", "amp:lastrun", `${k.ymd.slice(4,6)}/${k.ymd.slice(6)} ${String(Math.floor(k.min / 60)).padStart(2,"0")}:${String(k.min % 60).padStart(2,"0")} · ${list.length}종목 확인 · 알림 ${sent.length}건`);
+      return res.status(200).json({ status: "ok", checked: list.length, sent });
+    }
+
+    // ⭐ 자동 아침 메모 재료: /api/closing?memo=1
+    //    ① 간밤 미국 ETF 4개 (KIS 해외주식 현재가)  ② 이번 주 미국 '중요' 경제 발표 일정 (Forex Factory 공개 캘린더)
+    if (qv("memo")) {
+      const US = [["SPY", "AMS", "S&P500"], ["QQQ", "NAS", "나스닥100"], ["SOXX", "NAS", "반도체"], ["EWY", "AMS", "한국 ETF"]];
+      const us = {}, errs = [];
+      for (const [sym, ex, name] of US) {
+        try {
+          const o = (await kis("/uapi/overseas-price/v1/quotations/price", "HHDFS00000300", { AUTH: "", EXCD: ex, SYMB: sym }, auth)).output || {};
+          const last = num(o.last), base = num(o.base);
+          if (last && base) us[sym] = { name, last, change: +(((last / base) - 1) * 100).toFixed(2) };
+        } catch (e) { errs.push(sym + ": " + String(e.message).slice(0, 30)); }
+        await sleep(120);
+      }
+      let events = [];
+      try {
+        const r = await fetch("https://nfs.faireconomy.media/ff_calendar_thisweek.json");
+        const list = await r.json();
+        events = (Array.isArray(list) ? list : []).filter(e => e.country === "USD" && e.impact === "High")
+          .map(e => ({ title: e.title, date: e.date, forecast: e.forecast || "", previous: e.previous || "" }));
+      } catch (e) { errs.push("일정: " + String(e.message).slice(0, 30)); }
+      return res.status(200).json({ status: "ok", us, events, errors: errs });
     }
 
     // ⭐ 빚투 현황 (금융투자협회 FreeSIS, 일별 · 1~2 영업일 늦게 발표): /api/closing?debt=1
