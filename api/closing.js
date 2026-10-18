@@ -73,6 +73,7 @@ async function kis(path, trId, params, auth) {
   }
 }
 
+const CODE_RE = /^(Q\d{6}|[0-9][0-9A-Z]{5})$/;   // 주식·ETF 6자리(영문 섞인 새 코드 포함) · ETN Q+6자리
 const num = v => (v === undefined || v === null || v === "" ? null : Number(v));
 
 // 여러 종목 시세를 한 번에 (최대 30종목/1회) — FHKST11300006
@@ -86,7 +87,7 @@ async function multiQuote(codes, mkt, auth) {
     (Array.isArray(d.output) ? d.output : []).forEach(x => {
       const code = x.inter_shrn_iscd;
       const price = num(x.inter2_prpr);
-      if (!/^\d{6}$/.test(code || "") || !price) return;
+      if (!CODE_RE.test(code || "") || !price) return;
       let change = num(x.prdy_ctrt);
       if (change != null && change > 0 && (x.prdy_vrss_sign === "4" || x.prdy_vrss_sign === "5")) change = -change;
       let prev = num(x.inter2_sdpr);
@@ -179,7 +180,7 @@ module.exports = async (req, res) => {
     const today = kstYmd(new Date()), from = kstYmd(new Date(Date.now() - 160 * 86400e3));
 
     // ⭐ 일봉 약 100일: /api/closing?daily=005930  (60일선·변동폭 계산용. 실패하면 30일짜리로)
-    if (/^\d{6}$/.test(qv("daily"))) {
+    if (CODE_RE.test(qv("daily"))) {
       let rows = [];
       try {
         const d = await kis("/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice", "FHKST03010100",
@@ -206,7 +207,7 @@ module.exports = async (req, res) => {
     }
     // ⭐ 📱 보유·관심 목록 서버에 저장 (앱이 자동으로 보냄): POST /api/closing?push=sync
     if (qv("push") === "sync") {
-      const list = (Array.isArray(req.body && req.body.watch) ? req.body.watch : []).filter(w => /^\d{6}$/.test(w.code)).slice(0, 30)
+      const list = (Array.isArray(req.body && req.body.watch) ? req.body.watch : []).filter(w => CODE_RE.test(w.code)).slice(0, 30)
         .map(w => ({ code: w.code, name: String(w.name || w.code).slice(0, 20), on: w.on !== false, th: +w.th || 5, dir: w.dir || "both",
           buy: +w.buy || null, stop: +w.stop || -7, take: +w.take || 10 }));
       await redis("SET", "amp:watch", JSON.stringify(list));
@@ -224,6 +225,12 @@ module.exports = async (req, res) => {
       const list = JSON.parse((await redis("GET", "amp:watch")) || "[]").filter(w => w.on);
       if (!list.length) return res.status(200).json({ status: "ok", skipped: "목록 없음" });
       const q = await multiQuote(list.map(w => w.code), "J", auth);
+      // 한꺼번에 조회에서 빠진 종목(일부 ETF·ETN)은 하나씩 현재가로
+      for (const w of list.filter(w => !q[w.code])) {
+        try { const o = (await kis("/uapi/domestic-stock/v1/quotations/inquire-price", "FHKST01010100", { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: w.code }, auth)).output;
+          q[w.code] = { price: num(o.stck_prpr), change: num(o.prdy_ctrt) }; } catch (e) {}
+        await sleep(150);
+      }
       const sent = [];
       for (const w of list) {
         const x = q[w.code]; if (!x || !x.price) continue;
@@ -364,7 +371,7 @@ module.exports = async (req, res) => {
     }
 
     // ⭐ 투자자별 매매: /api/closing?investor=005930
-    if (/^\d{6}$/.test(qv("investor"))) {
+    if (CODE_RE.test(qv("investor"))) {
       const d = await kis("/uapi/domestic-stock/v1/quotations/inquire-investor", "FHKST01010900",
         { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: qv("investor") }, auth);
       const rows = (d.output || []).slice(0, 5).map(x => ({ date: x.stck_bsop_date,
@@ -373,15 +380,25 @@ module.exports = async (req, res) => {
     }
 
     // ⭐ 종목코드로 이름 찾기: /api/closing?lookup=005930
-    if (/^\d{6}$/.test(qv("lookup"))) {
-      const q = await multiQuote([qv("lookup")], "J", auth);
-      const x = q[qv("lookup")];
-      return res.status(200).json(x && x.name ? { status: "ok", code: qv("lookup"), name: x.name, price: x.price } : { status: "notfound" });
+    if (CODE_RE.test(qv("lookup"))) {
+      const code = qv("lookup");
+      let name = null, price = null;
+      try { const q = await multiQuote([code], "J", auth); if (q[code]) { name = q[code].name; price = q[code].price; } } catch (e) {}
+      if (!name) {   // ETF·ETN 등은 상품기본조회(CTPF1604R)로 이름 확인
+        try {
+          const o = (await kis("/uapi/domestic-stock/v1/quotations/search-info", "CTPF1604R", { PDNO: code, PRDT_TYPE_CD: "300" }, auth)).output || {};
+          name = (o.prdt_abrv_name || o.prdt_name || "").trim() || null;
+        } catch (e) {}
+      }
+      if (name && !price) {
+        try { price = num((await kis("/uapi/domestic-stock/v1/quotations/inquire-price", "FHKST01010100", { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: code }, auth)).output.stck_prpr); } catch (e) {}
+      }
+      return res.status(200).json(name ? { status: "ok", code, name, price } : { status: "notfound" });
     }
 
     // ⭐ 관심종목 현재가: /api/closing?codes=005930,000660  (&after=1 이면 NXT 애프터마켓 가격도)
     if (qv("codes")) {
-      const codes = qv("codes").split(",").filter(c => /^\d{6}$/.test(c)).slice(0, 20);
+      const codes = qv("codes").split(",").filter(c => CODE_RE.test(c)).slice(0, 20);
       const out = {}, errs = {};
       const queue = [...codes];
       const worker = async () => {
@@ -441,7 +458,7 @@ module.exports = async (req, res) => {
         let n = 0;
         (Array.isArray(d.output) ? d.output : []).forEach(x => {
           const code = x.mksc_shrn_iscd || x.stck_shrn_iscd;
-          if (!/^\d{6}$/.test(code || "")) return;
+          if (!CODE_RE.test(code || "")) return;
           pool.set(code, { code, name: x.hts_kor_isnm, price: num(x.stck_prpr), change: num(x.prdy_ctrt),
             amount: num(x.acml_tr_pbmn), vol: num(x.acml_vol) });
           n++;
