@@ -372,6 +372,13 @@ module.exports = async (req, res) => {
       return res.status(200).json({ status: "ok", rows });
     }
 
+    // ⭐ 종목코드로 이름 찾기: /api/closing?lookup=005930
+    if (/^\d{6}$/.test(qv("lookup"))) {
+      const q = await multiQuote([qv("lookup")], "J", auth);
+      const x = q[qv("lookup")];
+      return res.status(200).json(x && x.name ? { status: "ok", code: qv("lookup"), name: x.name, price: x.price } : { status: "notfound" });
+    }
+
     // ⭐ 관심종목 현재가: /api/closing?codes=005930,000660  (&after=1 이면 NXT 애프터마켓 가격도)
     if (qv("codes")) {
       const codes = qv("codes").split(",").filter(c => /^\d{6}$/.test(c)).slice(0, 20);
