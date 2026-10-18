@@ -48,6 +48,7 @@
   /* MSCI 월간 카드 */
   .msci-card{display:flex;align-items:center;padding:6px}
   .mk h3{font-size:15px;margin:2px 0 10px}
+  .automemo p{margin:0 0 7px;font-size:13.5px;line-height:1.7} .automemo small{color:var(--faint)}
   .mk .upd{font-size:11px;color:var(--faint);margin:10px 0 0;text-align:right}
   .eco .tvcal{height:430px;margin:6px -6px 0} .eco .tvnews{height:420px;margin:0 -6px}
   .tip.dictbtn{width:auto;height:auto;padding:3px 10px;border-radius:99px;font:600 11.5px/1.4 inherit;float:right;margin:0}
@@ -231,6 +232,8 @@
   .tip.on{background:#3b6fd1;color:#fff}
   #tipBox b{color:#1e3a8a} #tipBox .tt{display:block;font-weight:700;margin-bottom:3px}
   #tipBox .how{display:block;margin-top:5px;color:#777;font-size:11.5px}
+  .phsteps{list-style:none;margin:6px 0 8px;padding:0;font-size:12.5px;line-height:1.9} .phsteps li.ok{color:var(--faint)}
+  .phsteps code{background:#f3f4f8;padding:1px 6px;border-radius:5px;font-size:11.5px}
   .wl-group{font-size:13px;font-weight:700;color:var(--sub);margin:16px 4px 6px}
   .wl-group span{font-family:Nunito,sans-serif;color:var(--faint);margin-left:4px}
   .wl-item .ov{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 6px;margin-top:6px;font-size:12.5px}
@@ -404,6 +407,7 @@
       <p id="wlNotifyInfo">장중(09:00~15:30)에 이 앱을 열어 두면 5분마다 확인하고, 아래에서 고른 신호가 생기면 종목마다 하루 한 번 알려드립니다.</p>
       <div class="kinds" id="wlKinds"></div>
     </div>
+    <div class="card wl-alert" id="phoneCard"></div>
   </section>
 </div>
 
@@ -551,6 +555,7 @@ function renderEco(){
     { feedMode:"all_symbols", isTransparent:true, displayMode:"regular", width:"100%", height:"100%", colorTheme:"light", locale:"kr" });
 }
 
+const warnLines = arr => arr.map(t => { const m = t.match(/^@(\w+)@/); return (m ? tipHTML(m[1]) : "") + "⚠️ " + t.replace(/^@\w+@/, ""); }).join("<br>");
 /* ── 💳 빚투 현황 (금융투자협회 FreeSIS, 일별) ── */
 let DEBT = null;
 const won6 = v => {   // 백만원 → 조·억
@@ -615,6 +620,7 @@ async function loadDebt(){
   else { try { const j = await api("debt=1"); if (j && j.status === "ok" && (j.credit || j.fund)) { DEBT = j; ls.set("mm_debt", { at: Date.now(), slot: debtSlot(), d: j }); } else DEBT = c ? c.d : j; } catch(e) { if (c) DEBT = c.d; } }
   debtAt = (ls.get("mm_debt", null) || {}).at || null;
   const el = document.getElementById("debtBox"); if (el) el.innerHTML = debtHTML();
+  renderNote();
 }
 
 /* ── 🌡 한국 시장 체온 (KIS: 코스피 일별 + VKOSPI) ── */
@@ -716,6 +722,7 @@ async function loadMarket(){
   mkAt = (ls.get("mm_market", null) || {}).at || null;
   const el = document.getElementById("mkTemp"); if (el) el.innerHTML = mkHTML();
   const vc = document.getElementById("vkCard"); if (vc) vc.innerHTML = vkHTML();
+  renderNote();
 }
 function renderBoard(){
   const board = document.getElementById("board");
@@ -741,18 +748,91 @@ function renderBoard(){
   document.getElementById("updated").textContent = `${pad(p.h)}:${pad(p.mi)} 기준`;
 }
 
+/* ── 📝 오늘의 메모: 손으로 쓴 메모(note.js)가 있으면 그것, 없으면 🤖 자동 메모 (규칙 기반) ── */
+let MEMO = null;
+const EV_KO = [
+  [/Core CPI/i, "근원 소비자물가", "예상보다 높으면 금리 부담 → 주가·원화 약세"],
+  [/CPI/i, "소비자물가 (CPI)", "예상보다 높으면 금리 부담 → 주가·원화 약세"],
+  [/PPI/i, "생산자물가 (PPI)", "높으면 물가 걱정 ↑"],
+  [/Non-Farm|NFP/i, "비농업 고용", "너무 강하면 금리 부담, 너무 약하면 경기 걱정"],
+  [/Unemployment Rate/i, "실업률", "갑자기 오르면 경기 걱정"],
+  [/Unemployment Claims|Jobless/i, "실업수당 청구", "늘면 고용 약화"],
+  [/Retail Sales/i, "소매판매", "강하면 경기 좋음 · 대신 금리 부담"],
+  [/ISM Manufacturing/i, "ISM 제조업지수", "50 위 확장 · 아래 위축"],
+  [/ISM Services/i, "ISM 서비스업지수", "50 위 확장 · 아래 위축"],
+  [/PMI/i, "PMI (구매관리자지수)", "50 위 확장 · 아래 위축"],
+  [/Federal Funds Rate|FOMC Statement/i, "미국 기준금리 (FOMC)", "결정보다 앞으로의 말투가 중요"],
+  [/FOMC Meeting Minutes/i, "FOMC 회의록", "매파(긴축)적이면 부담"],
+  [/PCE/i, "PCE 물가", "연준 목표 물가 · 높으면 금리 부담"],
+  [/GDP/i, "GDP 성장률", "너무 약하면 침체 걱정"],
+  [/Fed Chair|Powell/i, "연준 의장 발언", "말투에 따라 크게 출렁일 수 있음"],
+];
+const evKo = t => { const m = EV_KO.find(([re]) => re.test(t)); return m ? { name: m[1], mean: m[2] } : { name: t, mean: "" }; };
+function autoMemo(){
+  if (!MEMO) return null;
+  const L = [], risk = [];
+  const u = MEMO.us || {}, f = k => u[k] ? `${u[k].name} <b class="${u[k].change >= 0 ? "up" : "down"}">${pct(u[k].change)}</b>` : null;
+  const usTxt = ["SPY","QQQ","SOXX","EWY"].map(f).filter(Boolean);
+  if (usTxt.length){
+    const ewy = u.EWY && u.EWY.change, qqq = u.QQQ && u.QQQ.change, sox = u.SOXX && u.SOXX.change;
+    let view = "보합권 출발 예상";
+    if ((ewy != null && ewy <= -1.5) || (qqq != null && sox != null && qqq <= -1.5 && sox <= -2)) { view = "<b class=\"down\">약세 출발 가능성 ↑</b>"; risk.push("간밤 미국·한국 ETF 약세"); }
+    else if (ewy != null && ewy >= 1.5) view = "<b class=\"up\">강세 출발 가능성 ↑</b>";
+    L.push(`${tipHTML("n_us")}🌙 <b>간밤 미국</b>: ${usTxt.join(" · ")} → 오늘 한국장 ${view}`);
+    if (sox != null && Math.abs(sox) >= 2) L.push(`${tipHTML("n_semi")}💾 반도체 ${pct(sox)} — 삼성전자·SK하이닉스에 ${sox > 0 ? "우호적" : "부담"}`);
+  }
+  if (MK){
+    const vk = MK.vkospi && MK.vkospi.value;
+    const rows = MK.rows || [], cl = rows.map(r => r.close);
+    const m200 = cl.length >= 200 ? cl.slice(0, 200).reduce((a, b) => a + b, 0) / 200 : null;
+    const t = [];
+    if (vk) { t.push(`VKOSPI ${vk.toFixed(1)}${vk >= 40 ? " (극심한 공포)" : vk >= 30 ? " (공포)" : vk >= 20 ? " (불안)" : " (평온)"}`); if (vk >= 30) risk.push("VKOSPI 공포 구간"); }
+    if (m200 && cl[0]) { const g = (cl[0] / m200 - 1) * 100; t.push(`코스피 200일선 ${g >= 0 ? "위" : "아래"} (${g >= 0 ? "+" : ""}${g.toFixed(1)}%)`); if (g < 0) risk.push("200일선 아래"); }
+    if (t.length) L.push(`${tipHTML("n_temp")}🌡 <b>한국 체온</b>: ${t.join(" · ")}`);
+  }
+  if (DEBT && DEBT.fund && DEBT.fund.length > 25){
+    const fd = DEBT.fund, ym = s => s.slice(0, 6), thisM = fd.filter(r => ym(r.date) === ym(fd[0].date)), prevYm = (fd.find(r => ym(r.date) < ym(fd[0].date)) || {}).date;
+    const lastM = prevYm ? fd.filter(r => ym(r.date) === ym(prevYm)) : [];
+    const av = a => a.length ? a.reduce((x, r) => x + r.forced, 0) / a.length : 0;
+    if (av(lastM) && av(thisM) >= av(lastM) * 2) { L.push(`${tipHTML("n_debt")}💳 반대매매가 지난달의 ${(av(thisM) / av(lastM)).toFixed(1)}배 — 빚투 물량 강제 매도 중`); risk.push("반대매매 급증"); }
+  }
+  const now = Date.now(), ev = MEMO.events || [];
+  const tonight = ev.filter(e => { const t = Date.parse(e.date); return t > now && t - now < 26 * 3600e3; });
+  const lastNight = ev.filter(e => { const t = Date.parse(e.date); return t <= now && now - t < 14 * 3600e3; });
+  if (lastNight.length) L.push(`${tipHTML("n_ev")}📊 <b>간밤 발표</b>: ${[...new Set(lastNight.map(e => evKo(e.title).name))].join(", ")} <small>(실제 숫자는 아래 경제 일정의 '발')</small>`);
+  if (tonight.length){
+    const seen = new Set();
+    const lines = tonight.filter(e => { const k = evKo(e.title).name; if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 4)
+      .map(e => { const k = evKo(e.title); return `${kstTime(e.date)} ${k.name}${e.forecast ? ` (예상 ${esc(e.forecast)})` : ""}${k.mean ? ` — ${k.mean}` : ""}`; });
+    L.push(`${tipHTML("n_ev")}📅 <b>다가오는 발표</b>:<br>&nbsp;&nbsp;· ${lines.join("<br>&nbsp;&nbsp;· ")}`);
+    if (tonight.some(e => /CPI|Federal Funds|Non-Farm/i.test(e.title))) risk.push("큰 발표 앞둠");
+  }
+  if (!L.length) return null;
+  const tone = risk.length >= 3 ? ["🛑", "오늘은 <b>쉬어가기</b> 권장", "down"] : risk.length >= 1 ? ["⚠️", "평소보다 <b>작게</b>, 손절은 꼭", ""] : ["✅", "<b>평소대로</b> — 큰 위험 신호 없음", "up"];
+  L.push(`${tipHTML("n_tone")}${tone[0]} <b>한 줄 정리</b>: ${tone[1]}${risk.length ? ` <small>(${risk.join(" · ")})</small>` : ""}`);
+  return L;
+}
+const kstTime = iso => { const d = new Date(Date.parse(iso) + 9 * 3600e3); const today = new Date(Date.now() + 9 * 3600e3).getUTCDate(); return `${d.getUTCDate() === today ? "오늘" : "내일"} ${String(d.getUTCHours()).padStart(2,"0")}:${String(d.getUTCMinutes()).padStart(2,"0")}`; };
 function renderNote(){
   const n = window.NOTE, el = document.getElementById("note");
   const p = kstParts();
   const today = `${p.y}-${pad(p.m)}-${pad(p.day)}`;
   const ok = n && n.text && n.date === today;
+  const auto = ok ? null : autoMemo();
   el.innerHTML = `
-    <div class="head">${tipHTML("m_note")}📝 오늘의 메모${ok ? `<small>${n.time} 작성</small>` : ""}</div>
-    <p${ok ? "" : ' class="none"'}>${ok ? n.text : "메모 없음"}</p>
+    <div class="head">${tipHTML("m_note")}📝 오늘의 메모${ok ? `<small>${n.time} 작성</small>` : auto ? `<small>🤖 자동 · 규칙 기반</small>` : ""}</div>
+    ${ok ? `<p>${n.text}</p>` : auto ? `<div class="automemo">${auto.map(x => `<p>${x}</p>`).join("")}</div>` : `<p class="none">${MEMO ? "메모 없음" : "자동 메모 만드는 중…"}</p>`}
     <div class="warn">시장 분위기 참고용 메모이며 매수·매도 권유가 아닙니다. 판단은 본인 몫입니다.</div>`;
 }
+async function loadMemo(){
+  if (location.protocol === "file:") return;
+  const c = ls.get("mm_memo", null);
+  if (c && c.slot === debtSlot()) MEMO = c.d;
+  else { try { const j = await api("memo=1"); if (j && j.status === "ok") { MEMO = j; ls.set("mm_memo", { slot: debtSlot(), d: j }); } } catch(e) { if (c) MEMO = c.d; } }
+  renderNote();
+}
 
-function refresh(){ renderHeader(); renderBoard(); renderNote(); document.getElementById("mkTemp").innerHTML = mkHTML(); document.getElementById("debtBox").innerHTML = debtHTML(); renderEco(); setTimeout(loadMarket, 300); setTimeout(loadDebt, 900); }
+function refresh(){ renderHeader(); renderBoard(); renderNote(); document.getElementById("mkTemp").innerHTML = mkHTML(); document.getElementById("debtBox").innerHTML = debtHTML(); renderEco(); setTimeout(loadMarket, 300); setTimeout(loadDebt, 900); setTimeout(loadMemo, 1500); }
 
 /* ── 탭 ── */
 let currentTab = "morning";
@@ -1023,6 +1103,9 @@ setInterval(fillResults, 10 * 60 * 1000);
 const HOLD_DEF = { stop: -7, take: 10 };
 /* 📌 업데이트 기록 — 새로 바꿀 때마다 맨 위에 추가 */
 const UPDATE_LOG = [
+  { date:"2026.10.16", tab:"morning", items:[
+    ["🤖 자동 아침 메모", "매일 아침 직접 메모를 쓰기 어려워서. 간밤 미국 ETF·한국 체온·빚투·경제 발표를 규칙대로 묶어 한 줄 정리(평소대로/작게/쉬어가기)까지 자동으로."],
+  ]},
   { date:"2026.10.15", tab:"morning", items:[
     ["주제별 갱신 시점", "자료가 실제로 바뀌는 때에만 새로 받기: 체온·VKOSPI는 장중 10분마다·장 마감 후 한 번, 빚투는 하루 두 번. 각 코너 아래 🕒 줄에 받은 시각과 다음 갱신 시점 표시."],
     ["VKOSPI (한국형 공포지수)", "기사에서 'VKOSPI 50 돌파'가 공포 신호로 쓰여서. 미국 VIX의 한국판이라 한국장 분위기에 더 직접적."],
@@ -1031,6 +1114,9 @@ const UPDATE_LOG = [
     ["📅 경제 일정 · 📰 뉴스", "CPI 같은 발표가 다음 날 한국장에 큰 영향을 줘서. 일정 + '예상보다 높으면 어떻게 되나' 읽는 법 + 금리 확률(FedWatch) 바로가기."],
     ["💳 빚투 현황", "반대매매·미수금·신용융자가 급증한다는 기사를 보고. 빚으로 산 물량이 강제로 팔리면 하락이 더 커지니 '숨은 위험'으로 확인."],
     ["🌡 한국 시장 체온 (맨 아래)", "7거래일 등락·고점 대비 낙폭·200일선 이탈을 한눈에. 기사·골드만삭스가 쓰는 기준을 숫자와 그래프로."],
+  ]},
+  { date:"2026.10.16", tab:"watch", items:[
+    ["📱 앱을 닫아도 오는 휴대폰 알림", "PC 알림은 앱을 열어 둬야만 와서. 서버가 장중 10분마다 대신 확인 → ntfy 앱으로 알림. 무료 서비스 3개(ntfy·Upstash·cron-job.org) 연결."],
   ]},
   { date:"2026.10.14", tab:"watch", items:[
     ["💰 보유 / 👀 관심 묶음", "산 종목과 살까 고민 중인 종목을 나눠 보기 쉽게."],
@@ -1165,7 +1251,7 @@ watch.forEach(w => { if (!w.dir) w.dir = "both"; if (w.stop == null) w.stop = HO
 let wlQuotes = {}, wlAfter = null;
 let wlLoaded = false;
 let openCode = null;                              // 펼쳐진 종목
-const saveWatch = () => store.set("mm_watch", watch);
+const saveWatch = () => { store.set("mm_watch", watch); schedulePushSync(); };
 const todayKey = () => { const p = kstParts(); return `${p.y}${pad(p.m)}${pad(p.day)}`; };
 const api = async (qs) => {
   const r = await fetch("/api/closing?" + qs, { headers: { "x-app-password": getPass() } });
@@ -1481,6 +1567,7 @@ document.getElementById("wlBody").addEventListener("click", async e => {
 });
 
 async function loadWatch(){
+  if (!wlLoaded) loadPhone();
   wlLoaded = true;
   if (!watch.length || location.protocol === "file:") { renderWatch(); return; }
   try {
@@ -1555,6 +1642,45 @@ setInterval(() => { if ((marketOpen() || afterHours()) && watch.length) loadWatc
 setInterval(() => { if (currentTab !== "morning") return; const c = ls.get("mm_market", null); if (!c || mkNeedsFetch(c)) loadMarket(); const d = ls.get("mm_debt", null); if (!d || d.slot !== debtSlot()) loadDebt(); }, 60 * 1000);
 document.getElementById("refresh").addEventListener("click", refresh);
 refresh();
+/* ── 📱 휴대폰 알림 (앱을 닫아도) ── */
+let PUSH = null, pushTimer = null;
+async function pushSync(){
+  if (location.protocol === "file:" || !PUSH || !PUSH.store) return;
+  try {
+    const r = await fetch("/api/closing?push=sync", { method: "POST", headers: { "content-type": "application/json", "x-app-password": getPass() },
+      body: JSON.stringify({ watch: watch.map(w => ({ code: w.code, name: w.name, on: w.on, th: w.th, dir: w.dir, buy: w.buy || null, stop: w.stop, take: w.take })) }) });
+    const j = await r.json();
+    if (j.status === "ok") { PUSH.count = j.saved; store.set("mm_push_synced", Date.now()); renderPhone(); }
+  } catch(e) {}
+}
+function schedulePushSync(){ clearTimeout(pushTimer); pushTimer = setTimeout(pushSync, 1500); }
+function renderPhone(){
+  const el = document.getElementById("phoneCard"); if (!el) return;
+  const p = PUSH;
+  const step = (ok, t) => `<li class="${ok ? "ok" : ""}">${ok ? "✅" : "⬜"} ${t}</li>`;
+  const ready = p && p.store && p.ntfy && p.cron;
+  const synced = store.get("mm_push_synced", null);
+  el.innerHTML = `<div class="wl-alert-top"><b>${tipHTML("ph")}📱 휴대폰 알림 <small style="font-weight:400;color:var(--faint)">앱을 닫아도</small></b>
+      ${p && p.ntfy ? `<button class="pill-btn" id="phTest">테스트 보내기</button>` : ""}</div>
+    ${!p ? `<p>상태 확인 중…</p>` : `
+    <ul class="phsteps">
+      ${step(p.ntfy, `${tipHTML("ph1")}① 휴대폰에 <b>ntfy</b> 앱 설치 + 주제 구독${p.topic ? ` <code>${esc(p.topic)}</code>` : ""}`)}
+      ${step(p.store, `${tipHTML("ph2")}② Vercel에서 무료 저장소(Upstash Redis) 연결`)}
+      ${step(p.cron, `${tipHTML("ph3")}③ cron-job.org에서 10분마다 확인 예약`)}
+    </ul>
+    <p>${ready ? `✅ 켜짐 · 서버에 ${p.count ?? 0}종목 저장됨${synced ? ` (${new Date(synced).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} 보냄)` : ""}<br><small>마지막 확인: ${p.lastRun ? esc(p.lastRun) : "아직 없음"}</small>`
+      : `설정이 끝나면 장중(09:00~15:30) 10분마다 서버가 대신 확인해서 <b>손절선 · 손절 절반 · 목표 · 하루 등락 기준</b>에 닿으면 휴대폰으로 알려 줘요.`}</p>
+    ${p.storeError ? `<p class="errinfo">${esc(p.storeError)}</p>` : ""}`}`;
+  const b = document.getElementById("phTest");
+  if (b) b.onclick = async () => { b.textContent = "보내는 중…"; try { const j = await api("push=test"); b.textContent = j.status === "ok" ? "보냈어요 ✓" : "실패"; } catch(e) { b.textContent = "실패"; } };
+}
+async function loadPhone(){
+  if (location.protocol === "file:") { PUSH = { store:false, ntfy:false, cron:false }; renderPhone(); return; }
+  try { PUSH = await api("push=status"); } catch(e) { PUSH = { store:false, ntfy:false, cron:false }; }
+  renderPhone();
+  if (PUSH && PUSH.store) pushSync();   // 탭을 열 때마다 최신 목록을 서버에 맞춰 둠
+}
+
 /* ── ? 메모 (마우스를 올리거나 누르면 설명) ── */
 const TIPS = {
   c_time:["⏰ 하루 진행 순서","14:30~15:10 회복 관찰 (5분마다 자동 확인)<br>15:10~15:20 최종 정리 → 이때 결과가 성적표에 기록<br>15:20~15:30 동시호가 (기록 고정)<br>15:30 이후 처음 열면 → 종가로 기록<br>다음 날 09:05 이후 → 시초가로 결과 채움","장중에 못 봐도 저녁에 한 번 열면 기록돼요."],
@@ -1579,7 +1705,13 @@ const TIPS = {
   m_dxy:["달러지수 (DXY)","세계 주요 통화 대비 달러 힘. 달러가 강하면 신흥국(한국 포함) 주식엔 부담.",""],
   m_gold:["금","불안할 때 사람들이 몰리는 안전자산.",""],
   m_wti:["WTI 원유","국제 유가. 정유·항공·화학주에 영향.",""],
-  m_note:["오늘의 메모","그날 아침 시장 분위기를 한 줄로 정리한 메모.","매수·매도 권유가 아닌 참고용."],
+  m_note:["📝 오늘의 메모","직접 쓴 메모(note.js)가 오늘 날짜로 있으면 그걸, 없으면 🤖 자동 메모를 보여 줘요.<br>자동 메모 = 간밤 미국 ETF · 한국 체온 · 빚투 · 경제 발표 일정을 정해진 규칙으로 묶어 쓴 요약 (AI가 쓴 글이 아님).","하루 세 번(새벽·09시·17시 이후) 새로 만들어요. 매수·매도 권유가 아닌 분위기 참고용."],
+  n_us:["간밤 미국 (ETF 4개)","S&P500(SPY) · 나스닥100(QQQ) · 반도체(SOXX) · 한국 ETF(EWY)의 간밤 등락. 출처: KIS 해외주식 시세.<br>규칙: EWY −1.5% 이하, 또는 나스닥 −1.5% & 반도체 −2% 이하 → '약세 출발 가능성'. EWY +1.5% 이상 → '강세 출발 가능성'.","EWY는 미국에서 거래되는 한국 주식 묶음이라 다음 날 코스피 출발과 가장 비슷하게 움직여요."],
+  n_semi:["반도체","반도체 ETF(SOXX)가 ±2% 넘게 움직이면 따로 알려 줘요.","코스피에서 삼성전자·SK하이닉스 비중이 커서 반도체 흐름이 지수 전체를 좌우해요."],
+  n_temp:["한국 체온","아래 🌡 한국 시장 체온 코너의 VKOSPI와 200일선 요약.","VKOSPI 30↑ 또는 200일선 아래면 '위험 신호'로 셉니다."],
+  n_debt:["빚투","아래 💳 빚투 현황에서 반대매매가 지난달 하루 평균의 2배를 넘으면 표시.",""],
+  n_ev:["경제 발표","미국 '중요도 높음' 발표 일정 (Forex Factory 공개 캘린더). 간밤 발표 = 지난 14시간, 다가오는 발표 = 앞으로 26시간.","CPI·기준금리·고용 발표를 앞두면 '위험 신호'로 셉니다 (결과에 따라 크게 출렁일 수 있어서). 실제 발표 숫자는 경제 일정 위젯의 '발'."],
+  n_tone:["한 줄 정리 규칙","위험 신호 개수로 정해요: 0개 = ✅ 평소대로 · 1~2개 = ⚠️ 평소보다 작게 · 3개 이상 = 🛑 쉬어가기.<br>위험 신호 = 간밤 약세 · VKOSPI 30↑ · 200일선 아래 · 반대매매 급증 · 큰 발표 앞둠","기계적인 규칙이라 뉴스(전쟁·정책 등)는 반영하지 못해요. 뉴스는 아래 시장 뉴스에서."],
   m_vk:["VKOSPI (한국형 공포지수)","코스피200 옵션 가격에 담긴 '앞으로 30일 동안 시장이 얼마나 출렁일까'의 예상치 (연율 %). 높을수록 큰 움직임을 예상 = 불안.<br>20↓ 평온 · 20~30 불안 · 30↑ 공포 · 40↑ 극심한 공포","출처: KIS 지수 시세 (코드는 KIS 지수 목록 파일에서 자동으로 찾음). 50을 넘는 건 드문 극단 상황."],
   m_temp:["🌡 한국 시장 체온","코스피 최근 흐름을 숫자 + 그래프로. ① 7거래일 등락 ② 고점 대비 낙폭 ③ 200일선(장기 추세) ④ 경고 요약.","출처: KIS 코스피 일별 지수 약 330거래일 → 앱이 직접 계산. 10분마다 새로 받아요."],
   m_7d:["최근 7거래일","막대 하나 = 하루 등락률(%). 빨강 = 상승, 파랑 = 하락. 합계 = 7거래일 누적 등락.","'몇 일 빠졌나'보다 '얼마나 깊게 빠졌나'가 중요해요 (골드만삭스도 하락 일수보다 압축된 낙폭에 주목)."],
@@ -1651,6 +1783,10 @@ const TIPS = {
   d_inv:["투자자별 순매수","외국인·기관이 최근 며칠 산 수량 − 판 수량. +면 사는 중.","며칠 연속 같은 방향이면 큰손의 뜻이 담긴 흐름일 가능성이 높아요."],
   journal:["📒 매매 일지","팔 때마다 매수가·판 가격·수익률·산 이유·소감이 쌓여요. 위쪽 숫자는 '몇 번 중 몇 번 수익'과 평균 수익률.","10번 이상 쌓이면 '어떤 이유로 산 게 잘 맞았나'를 돌아보세요. 이 브라우저에만 저장돼요."],
   notify:["PC 알림","앱을 열어 두면 5분마다 확인해 신호가 생기면 화면 구석에 알림을 띄워요. 같은 종목·같은 신호는 하루 한 번.","앱(탭)을 닫으면 알림이 오지 않아요."],
+  ph:["📱 휴대폰 알림 (앱을 닫아도)","앱을 닫아도 서버가 장중 10분마다 내 관심·보유 종목을 확인해서, 손절선·손절 절반·목표·하루 등락 기준에 닿으면 휴대폰으로 알려 줘요. 같은 종목·같은 신호는 하루 한 번.","무료 서비스 3개를 이어 붙인 구조예요: ntfy(알림 앱) + Upstash(목록 보관함) + cron-job.org(10분 알람시계). 목록은 종목을 바꿀 때마다 앱이 자동으로 서버에 보내요."],
+  ph1:["① ntfy 앱","무료 알림 앱 (가입 없음). 앱스토어/플레이스토어에서 'ntfy' 설치 → + 눌러 주제(Topic) 이름 입력 → 구독.","주제 이름은 비밀번호처럼 남이 모르게 길게 (예: ampm-seyoung-7k2q). 같은 이름을 Vercel 환경변수 NTFY_TOPIC 에도 넣어요."],
+  ph2:["② 무료 저장소 (Upstash Redis)","서버가 내 종목 목록을 기억해 두는 곳. Vercel 프로젝트 → Storage → Create Database → Upstash (Redis) → 무료 플랜 → 프로젝트 연결.","연결하면 필요한 키(KV_REST_API_URL / TOKEN)가 자동으로 들어가요. 그다음 Redeploy 한 번."],
+  ph3:["③ 10분 알람시계 (cron-job.org)","무료 예약 서비스가 10분마다 내 서버 주소를 눌러 깨워 줘요. 주소: https://am-pm-stock.vercel.app/api/closing?alert=(내가 정한 비밀 글자)","Vercel 환경변수 ALERT_TOKEN 에 같은 비밀 글자를 넣어요. 장 시간이 아니면 서버가 알아서 그냥 넘어가요."],
   k_stop:["손절선 알림","매수가 대비 손절선까지 빠지면.","가장 중요한 알림 — 꺼 두지 않기를 권해요."],
   k_warn:["손절 절반 알림","손절선의 절반만큼 빠지면 미리 경고. 예: 손절 −6%면 −3%에서.","이때 뉴스·공시를 확인해 두면 손절선에서 덜 당황해요."],
   k_take:["목표 도달 알림","매수가 대비 목표 수익에 닿으면.","전부 팔거나, 절반만 팔아 수익을 지키는 방법이 있어요."],
