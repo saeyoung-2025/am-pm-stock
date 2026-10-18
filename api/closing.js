@@ -37,6 +37,7 @@ let tokenCache = { token: null, exp: 0 };
 
 async function getToken(key, secret) {
   if (tokenCache.token && Date.now() < tokenCache.exp) return tokenCache.token;
+  try { const t = await redis("GET", "amp:kistoken"); if (t) { const o = JSON.parse(t); if (o.exp > Date.now() + 600e3) { tokenCache = o; return o.token; } } } catch (e) {}
   const r = await fetch(`${BASE}/oauth2/tokenP`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -46,6 +47,7 @@ async function getToken(key, secret) {
   if (!j.access_token) throw new Error("토큰 발급 실패: " + (j.error_description || j.msg1 || r.status)
     + ` (키 ${key.length}자 · 시크릿 ${secret.length}자 / 정상: 36자 · 180자)`);
   tokenCache = { token: j.access_token, exp: Date.now() + 20 * 3600 * 1000 };
+  try { await redis("SET", "amp:kistoken", JSON.stringify(tokenCache), "EX", 72000); } catch (e) {}
   return j.access_token;
 }
 
@@ -161,6 +163,13 @@ module.exports = async (req, res) => {
   if (!isCron && pass && (req.headers["x-app-password"] || "").trim() !== pass) return res.status(401).json({ status: "unauthorized" });
 
   try {
+    if (isCron) {
+      const k0 = kstNow();
+      if (k0.wd === 0 || k0.wd === 6 || k0.min < 540 || k0.min > 935) {
+        try { await redis("SET", "amp:ping", `${k0.ymd.slice(4,6)}/${k0.ymd.slice(6)} ${String(Math.floor(k0.min / 60)).padStart(2,"0")}:${String(k0.min % 60).padStart(2,"0")}`); } catch (e) {}
+        return res.status(200).json({ status: "ok", skipped: "장 시간 아님" });
+      }
+    }
     const auth = { key, secret, token: await getToken(key, secret) };
 
     const qv = k => (req.query && req.query[k]) ? String(req.query[k]) : "";
@@ -192,7 +201,7 @@ module.exports = async (req, res) => {
     // ⭐ 📱 휴대폰 알림 상태: /api/closing?push=status
     if (qv("push") === "status") {
       const st = { status: "ok", store: !!(R_URL() && R_TOK()), ntfy: !!(process.env.NTFY_TOPIC || "").trim(), cron: !!alertTok, topic: (process.env.NTFY_TOPIC || "").trim() || null };
-      try { if (st.store) { st.count = JSON.parse((await redis("GET", "amp:watch")) || "[]").length; st.lastRun = await redis("GET", "amp:lastrun"); } } catch (e) { st.storeError = String(e.message).slice(0, 60); }
+      try { if (st.store) { st.count = JSON.parse((await redis("GET", "amp:watch")) || "[]").length; st.lastRun = await redis("GET", "amp:lastrun"); st.ping = await redis("GET", "amp:ping"); } } catch (e) { st.storeError = String(e.message).slice(0, 60); }
       return res.status(200).json(st);
     }
     // ⭐ 📱 보유·관심 목록 서버에 저장 (앱이 자동으로 보냄): POST /api/closing?push=sync
