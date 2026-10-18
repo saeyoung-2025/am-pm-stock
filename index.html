@@ -394,7 +394,7 @@
       <datalist id="wlList"></datalist>
       <button id="wlAddBtn">추가</button>
     </div>
-    <p class="wl-hint">이름을 입력하면 목록에서 고를 수 있어요. 목록에 없으면 종목코드 6자리를 넣으세요.</p>
+    <p class="wl-hint">이름을 입력하면 목록에서 고를 수 있어요. 목록에 없으면 <b>종목코드 6자리</b>만 넣으세요 — 이름은 자동으로 찾아와요.</p>
   </section>
   <h2><i class="tip" data-tip="data">?</i>⭐ 내 관심종목 <button class="help-btn" data-help="watch">📖 신호 기준</button></h2>
   <section id="wlBody"></section>
@@ -1374,15 +1374,23 @@ const TIP = {
   tail:"장중에 3% 넘게 빠졌다가 절반 이상 회복했습니다. 사려는 힘이 들어왔다는 뜻으로, 종가베팅에서 좋게 보는 모양이에요."
 };
 
-function addWatch(){
+async function addWatch(){
   const inp = document.getElementById("wlInput");
-  const v = inp.value.trim();
+  const v = inp.value.replace(/\s/g, "");
   if (!v) return;
   let hit = SUGGEST.find(([c,n]) => n === v || c === v);
   let code, name;
   if (hit) [code, name] = hit;
-  else if (/^\d{6}$/.test(v)) { code = v; name = prompt("종목 이름을 적어 주세요 (표시용)", v) || v; }
-  else { alert("목록에서 고르시거나 종목코드 6자리를 넣어 주세요."); return; }
+  else if (/^\d{6}$/.test(v)) {
+    // 목록에 없는 코드 → 서버에서 이름 찾아오기 (KIS)
+    code = v;
+    const btn = document.getElementById("wlAddBtn"); btn.textContent = "찾는 중…";
+    try { const j = await api("lookup=" + v); if (j && j.status === "ok") name = j.name; } catch(e) {}
+    btn.textContent = "추가";
+    if (!name) { alert(`종목코드 ${v}를 찾지 못했어요. 숫자 6자리가 맞는지 확인해 주세요.`); return; }
+  }
+  else if (/^\d+$/.test(v)) { alert("종목코드는 숫자 6자리예요. 앞의 0까지 넣어 주세요 (예: 005930)."); return; }
+  else { alert("목록에 있는 이름을 고르시거나, 종목코드 6자리(숫자)를 넣어 주세요."); return; }
   if (watch.some(w => w.code === code)) { alert("이미 추가된 종목입니다."); return; }
   if (watch.length >= 20) { alert("관심종목은 20개까지 넣을 수 있어요."); return; }
   watch.push({ code, name, th:5, dir:"both", on:true, stop:HOLD_DEF.stop, take:HOLD_DEF.take });
@@ -1661,11 +1669,11 @@ function renderPhone(){
   const cronOn = !!(p && (p.lastRun || p.ping));   // 예약이 실제로 한 번이라도 서버를 깨웠나
   const ready = p && p.store && p.ntfy && cronOn;
   const synced = store.get("mm_push_synced", null);
-  el.innerHTML = `<div class="wl-alert-top"><b>${tipHTML("ph")}📱 휴대폰 알림 <small style="font-weight:400;color:var(--faint)">앱을 닫아도</small></b>
+  el.innerHTML = `<div class="wl-alert-top"><b>${tipHTML("ph")}📱💻 휴대폰 · PC 알림 <small style="font-weight:400;color:var(--faint)">앱을 닫아도</small></b>
       ${p && p.ntfy ? `<button class="pill-btn" id="phTest">테스트 보내기</button>` : ""}</div>
     ${!p ? `<p>상태 확인 중…</p>` : `
     <ul class="phsteps">
-      ${step(p.ntfy, `${tipHTML("ph1")}① 휴대폰에 <b>ntfy</b> 앱 설치 + 주제 구독${p.topic ? ` <code>${esc(p.topic)}</code>` : ""}`)}
+      ${step(p.ntfy, `${tipHTML("ph1")}① 휴대폰 <b>ntfy</b> 앱 (+ PC는 ntfy.sh/app) 에서 주제 구독${p.topic ? ` <code>${esc(p.topic)}</code>` : ""}`)}
       ${step(p.store, `${tipHTML("ph2")}② Vercel에서 무료 저장소(Upstash Redis) 연결`)}
       ${step(cronOn, `${tipHTML("ph3")}③ cron-job.org에서 10분마다 확인 예약${cronOn ? "" : p.cron ? " <small>(비밀 글자 OK · 예약 기다리는 중)</small>" : ""}`)}
     </ul>
@@ -1763,7 +1771,7 @@ const TIPS = {
   c_hit:["적중 기준","기록한 가격(15:10~15:30 또는 마감 후 종가)보다 다음 거래일 시초가가 높으면 적중.","실제 매매에서는 수수료·세금(약 0.2%)이 빠진다는 것도 기억."],
   data:["자료 출처","시세·일봉·지수·순위·투자자별 매매 = 한국투자증권 KIS Open API (내 계좌 키, 무료).<br>이동평균선·변동폭·회복률·점수 = 그 숫자로 앱이 직접 계산.","아침 계기판 그래프 = TradingView 무료 위젯 (지연 · 참고용)."],
 
-  add:["종목 추가","관심 있는 종목을 넣는 곳. 이름을 치면 우량주 목록에서 고를 수 있고, 목록에 없으면 종목코드 6자리를 넣으세요. 최대 20개.","같은 종목은 한 번만 들어가요."],
+  add:["종목 추가","관심 있는 종목을 넣는 곳. 이름을 치면 우량주 목록에서 고를 수 있고, 목록에 없으면 종목코드 6자리(숫자)만 넣으세요. 이름은 KIS에서 자동으로 찾아와요. 최대 20개.","같은 종목은 한 번만 들어가요."],
   g_hold:["💰 보유 중","<b>💰 샀어요</b>로 매수가를 넣은 종목. 손절선·목표 알림이 붙어 '내 돈 지키기'를 합니다.","팔면 ✅ 팔았어요 → 일지로 옮겨지고 관심 묶음으로 돌아가요."],
   g_look:["👀 관심 (매수 전)","살까 고민 중인 종목. 흐름·거래량 같은 신호로 '살 만한 때'를 지켜봅니다.","실제로 사면 💰 샀어요를 누르세요."],
   ov:["🟢🟡🔴 종합 상태","흐름(이동평균선), 시장 대비 강도, 손절 신호를 모아 한 줄로 판정.<br>🟢 순항: 걱정 신호 없음<br>🟡 지켜보기: 걱정 신호 1개<br>🔴 점검 필요: 손절선 도달 또는 걱정 신호 2개 이상","걱정 신호 = 손절 절반 · 20일선 붕괴 · 하락 흐름 · 시장보다 5%p 이상 약함 · 1년 최저가 근처"],
@@ -1785,7 +1793,7 @@ const TIPS = {
   journal:["📒 매매 일지","팔 때마다 매수가·판 가격·수익률·산 이유·소감이 쌓여요. 위쪽 숫자는 '몇 번 중 몇 번 수익'과 평균 수익률.","10번 이상 쌓이면 '어떤 이유로 산 게 잘 맞았나'를 돌아보세요. 이 브라우저에만 저장돼요."],
   notify:["PC 알림","앱을 열어 두면 5분마다 확인해 신호가 생기면 화면 구석에 알림을 띄워요. 같은 종목·같은 신호는 하루 한 번.","앱(탭)을 닫으면 알림이 오지 않아요."],
   ph:["📱 휴대폰 알림 (앱을 닫아도)","앱을 닫아도 서버가 장중 10분마다 내 관심·보유 종목을 확인해서, 손절선·손절 절반·목표·하루 등락 기준에 닿으면 휴대폰으로 알려 줘요. 같은 종목·같은 신호는 하루 한 번.","무료 서비스 3개를 이어 붙인 구조예요: ntfy(알림 앱) + Upstash(목록 보관함) + cron-job.org(10분 알람시계). 목록은 종목을 바꿀 때마다 앱이 자동으로 서버에 보내요."],
-  ph1:["① ntfy 앱","무료 알림 앱 (가입 없음). 앱스토어/플레이스토어에서 'ntfy' 설치 → + 눌러 주제(Topic) 이름 입력 → 구독.","주제 이름은 비밀번호처럼 남이 모르게 길게 (예: ampm-seyoung-7k2q). 같은 이름을 Vercel 환경변수 NTFY_TOPIC 에도 넣어요."],
+  ph1:["① ntfy (휴대폰 · PC)","무료 알림 앱 (가입 없음). 휴대폰: 플레이스토어에서 'ntfy' 설치 → + 눌러 주제 이름 입력 → 구독.<br>PC: 크롬에서 ntfy.sh/app → 권한 부여하기 → 주제 구독하기. 같은 주제를 구독한 곳이면 모두 알림이 와요.","주제 이름은 비밀번호처럼 남이 모르게 길게 (예: ampm-seyoung-7k2q). 같은 이름을 Vercel 환경변수 NTFY_TOPIC 에도 넣어요."],
   ph2:["② 무료 저장소 (Upstash Redis)","서버가 내 종목 목록을 기억해 두는 곳. Vercel 프로젝트 → Storage → Create Database → Upstash (Redis) → 무료 플랜 → 프로젝트 연결.","연결하면 필요한 키(KV_REST_API_URL / TOKEN)가 자동으로 들어가요. 그다음 Redeploy 한 번."],
   ph3:["③ 10분 알람시계 (cron-job.org)","무료 예약 서비스가 10분마다 내 서버 주소를 눌러 깨워 줘요. 주소: https://am-pm-stock.vercel.app/api/closing?alert=(내가 정한 비밀 글자)","Vercel 환경변수 ALERT_TOKEN 에 같은 비밀 글자를 넣어요. 장 시간이 아니면 서버가 알아서 그냥 넘어가요."],
   k_stop:["손절선 알림","매수가 대비 손절선까지 빠지면.","가장 중요한 알림 — 꺼 두지 않기를 권해요."],
