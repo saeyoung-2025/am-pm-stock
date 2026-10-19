@@ -103,16 +103,24 @@ async function multiQuote(codes, mkt, auth) {
 
 // ── VKOSPI: 코드가 공개 문서에 없어서, KIS가 배포하는 지수 목록 파일에서 '변동성' 이름으로 찾음 ──
 const zlib = require("zlib");
+// zip 첫 파일 풀기 (끝의 '중앙 디렉터리'에서 크기·위치를 읽어 안전하게)
+function unzipFirst(buf) {
+  let e = buf.length - 22;
+  while (e >= 0 && buf.readUInt32LE(e) !== 0x06054b50) e--;
+  if (e < 0) throw new Error("zip 형식 아님");
+  const cd = buf.readUInt32LE(e + 16);
+  if (buf.readUInt32LE(cd) !== 0x02014b50) throw new Error("zip 목록 이상");
+  const method = buf.readUInt16LE(cd + 10), csize = buf.readUInt32LE(cd + 20), lho = buf.readUInt32LE(cd + 42);
+  const start = lho + 30 + buf.readUInt16LE(lho + 26) + buf.readUInt16LE(lho + 28);
+  const body = buf.slice(start, start + csize);
+  return method === 8 ? zlib.inflateRawSync(body) : body;
+}
 let vkCode = null;
 async function findVkospiCode() {
   if (vkCode) return [vkCode];
   const r = await fetch("https://new.real.download.dws.co.kr/common/master/idxcode.mst.zip");
   const buf = Buffer.from(await r.arrayBuffer());
-  if (buf.readUInt32LE(0) !== 0x04034b50) throw new Error("지수 목록 파일 형식 다름");
-  const method = buf.readUInt16LE(8), csize = buf.readUInt32LE(18);
-  const start = 30 + buf.readUInt16LE(26) + buf.readUInt16LE(28);
-  const body = buf.slice(start, start + csize);
-  const raw = method === 8 ? zlib.inflateRawSync(body) : body;
+  const raw = unzipFirst(buf);
   let text;
   try { text = new TextDecoder("euc-kr").decode(raw); } catch (e) { text = raw.toString("latin1"); }
   // '변동성'이 들어간 줄을 모두 후보로 — 저변동·고변동·변동성조절·타겟 같은 다른 지수는 빼고, 'VKOSPI'·'변동성지수' 이름을 앞으로
@@ -157,6 +165,52 @@ async function ntfy(title, message, opt = {}) {
     body: JSON.stringify({ topic, title, message, priority: opt.priority || 4, tags: opt.tags || [], click: opt.click || "https://am-pm-stock.vercel.app/" }) });
   if (!r.ok) throw new Error("ntfy " + r.status);
 }
+// ── 📋 DART 공시 (금융감독원 오픈API, 무료 키: DART_API_KEY) ──
+const DART_KEY = () => (process.env.DART_API_KEY || "").trim();
+// 공시 제목으로 분류 (공백·가운뎃점 무시)
+const DART_RULES = [
+  ["red", "유상증자", /유상증자결정/], ["red", "전환사채 발행", /전환사채권발행결정/], ["red", "신주인수권부사채 발행", /신주인수권부사채권발행결정/],
+  ["red", "감자", /감자결정/], ["red", "최대주주 변경", /최대주주변경/], ["red", "횡령·배임", /횡령|배임/],
+  ["red", "감사의견 비적정", /감사의견(거절|한정|부적정)|비적정/], ["red", "관리종목·상장폐지 위험", /관리종목|상장적격성|상장폐지|실질심사/],
+  ["red", "거래정지", /매매거래정지|거래정지/], ["red", "소송", /소송등의제기|소송등의판결/],
+  ["yellow", "임원·주요주주 지분 변동", /임원.?주요주주특정증권등소유상황보고서/], ["yellow", "최대주주 지분 변동", /최대주주등소유주식변동신고서/],
+  ["yellow", "5% 큰손 지분 변동", /주식등의대량보유상황보고서/], ["yellow", "주식 담보 제공", /담보/],
+  ["green", "자사주 매입", /자기주식취득결정/], ["green", "자사주 소각", /주식소각결정|자기주식소각/], ["green", "공급계약 체결", /단일판매.?공급계약체결/],
+  ["green", "배당", /배당결정/], ["green", "무상증자", /무상증자결정/],
+  ["blue", "실적 발표", /영업\(잠정\)실적|잠정실적|매출액또는손익구조/],
+];
+function dartClass(title) {
+  const t = String(title || "").replace(/[\s·ㆍ‧・]/g, "");
+  if (/정정|첨부추가|기재정정/.test(t) && !/최대주주|유상증자/.test(t)) return null;   // 정정 공시는 대부분 생략
+  const r = DART_RULES.find(([, , re]) => re.test(t));
+  return r ? { lv: r[0], tag: r[1] } : null;
+}
+async function dartList(corp, days) {
+  const end = new Date(Date.now() + 9 * 3600e3), bgn = new Date(end - days * 86400e3);
+  const f = d => d.toISOString().slice(0, 10).replace(/-/g, "");
+  const r = await fetch(`https://opendart.fss.or.kr/api/list.json?crtfc_key=${DART_KEY()}&corp_code=${corp}&bgn_de=${f(bgn)}&end_de=${f(end)}&page_count=100`);
+  const j = await r.json();
+  if (j.status === "013") return [];
+  if (j.status !== "000") throw new Error("DART " + j.status + " " + (j.message || ""));
+  return (j.list || []).map(x => ({ title: String(x.report_nm || "").trim(), rcept: x.rcept_no, date: x.rcept_dt, by: x.flr_nm, cls: dartClass(x.report_nm) }));
+}
+// 종목코드(6자리) → DART 고유번호(8자리). 저장소에 보관, 모르는 코드가 있을 때만 DART 회사 목록을 받아 찾음
+async function corpCodes(codes) {
+  const out = {}, need = [];
+  for (const c of codes) { let v = null; try { v = await redis("HGET", "amp:corp", c); } catch (e) {} if (v) out[c] = v; else need.push(c); }
+  if (need.length) {
+    const r = await fetch(`https://opendart.fss.or.kr/api/corpCode.xml?crtfc_key=${DART_KEY()}`);
+    const xml = unzipFirst(Buffer.from(await r.arrayBuffer())).toString("utf8");
+    for (const c of need) {
+      const m = xml.match(new RegExp(`<corp_code>(\\d{8})</corp_code>\\s*<corp_name>[^<]*</corp_name>\\s*(?:<corp_eng_name>[^<]*</corp_eng_name>\\s*)?<stock_code>${c}</stock_code>`));
+      out[c] = m ? m[1] : "-";   // ETF·ETN 등은 DART 회사가 아님
+      try { await redis("HSET", "amp:corp", c, out[c]); } catch (e) {}
+    }
+  }
+  return out;
+}
+const DART_LINK = r => `https://dart.fss.or.kr/dsaf001/main.do?rcpNo=${r}`;
+
 const kstNow = () => { const d = new Date(Date.now() + 9 * 3600e3); return { ymd: d.toISOString().slice(0, 10).replace(/-/g, ""), min: d.getUTCHours() * 60 + d.getUTCMinutes(), wd: d.getUTCDay() }; };
 
 module.exports = async (req, res) => {
@@ -174,9 +228,29 @@ module.exports = async (req, res) => {
   try {
     if (isCron) {
       const k0 = kstNow();
+      let dartSent = [];
+      // 📋 공시: 평일 07:00~20:00, 30분마다 (장중이든 아니든)
+      if (DART_KEY() && k0.wd > 0 && k0.wd < 6 && k0.min >= 420 && k0.min <= 1200 && k0.min % 30 < 10) {
+        try {
+          const list = JSON.parse((await redis("GET", "amp:watch")) || "[]").filter(w => w.on);
+          const cc = await corpCodes(list.map(w => w.code));
+          for (const w of list) {
+            if (!cc[w.code] || cc[w.code] === "-") continue;
+            let items = [];
+            try { items = await dartList(cc[w.code], 2); } catch (e) { continue; }
+            for (const d of items.filter(d => d.cls)) {
+              if ((await redis("SET", `amp:dart:${d.rcept}`, "1", "NX", "EX", 604800)) !== "OK") continue;
+              const icon = { red: "🔴", yellow: "🟡", green: "🟢", blue: "📊" }[d.cls.lv];
+              await ntfy(`${icon} ${w.name} · ${d.cls.tag} 공시`, `${d.title}\n제출: ${d.by || ""}${d.cls.lv === "red" ? "\n악재일 수 있어요. 내용을 확인하세요." : ""}`,
+                { priority: d.cls.lv === "red" || d.cls.lv === "yellow" ? 4 : 3, tags: ["page_facing_up"], click: DART_LINK(d.rcept) });
+              dartSent.push(`${w.name}:${d.cls.tag}`);
+            }
+          }
+        } catch (e) {}
+      }
       if (k0.wd === 0 || k0.wd === 6 || k0.min < 540 || k0.min > 935) {
         try { await redis("SET", "amp:ping", `${k0.ymd.slice(4,6)}/${k0.ymd.slice(6)} ${String(Math.floor(k0.min / 60)).padStart(2,"0")}:${String(k0.min % 60).padStart(2,"0")}`); } catch (e) {}
-        return res.status(200).json({ status: "ok", skipped: "장 시간 아님" });
+        return res.status(200).json({ status: "ok", skipped: "장 시간 아님", dart: dartSent });
       }
     }
     const auth = { key, secret, token: await getToken(key, secret) };
@@ -209,7 +283,7 @@ module.exports = async (req, res) => {
 
     // ⭐ 📱 휴대폰 알림 상태: /api/closing?push=status
     if (qv("push") === "status") {
-      const st = { status: "ok", store: !!(R_URL() && R_TOK()), ntfy: !!(process.env.NTFY_TOPIC || "").trim(), cron: !!alertTok, topic: (process.env.NTFY_TOPIC || "").trim() || null };
+      const st = { status: "ok", store: !!(R_URL() && R_TOK()), ntfy: !!(process.env.NTFY_TOPIC || "").trim(), cron: !!alertTok, dart: !!DART_KEY(), topic: (process.env.NTFY_TOPIC || "").trim() || null };
       try { if (st.store) { st.count = JSON.parse((await redis("GET", "amp:watch")) || "[]").length; st.lastRun = await redis("GET", "amp:lastrun"); st.ping = await redis("GET", "amp:ping"); } } catch (e) { st.storeError = String(e.message).slice(0, 60); }
       return res.status(200).json(st);
     }
@@ -401,6 +475,25 @@ module.exports = async (req, res) => {
       const rows = (d.output || []).slice(0, 5).map(x => ({ date: x.stck_bsop_date,
         person: num(x.prsn_ntby_qty), foreign: num(x.frgn_ntby_qty), inst: num(x.orgn_ntby_qty) }));
       return res.status(200).json({ status: "ok", rows });
+    }
+
+    // ⭐ 📋 종목 최근 공시 (30일): /api/closing?dart=005930   · 여러 종목 최근 3일 악재: ?dartbad=005930,000660
+    if (qv("dart") || qv("dartbad")) {
+      if (!DART_KEY()) return res.status(200).json({ status: "no_key" });
+      if (qv("dart")) {
+        const code = qv("dart"); if (!CODE_RE.test(code)) return res.status(200).json({ status: "bad" });
+        const cc = await corpCodes([code]);
+        if (cc[code] === "-") return res.status(200).json({ status: "ok", items: [], note: "DART 공시 대상 아님 (ETF·ETN 등)" });
+        const items = (await dartList(cc[code], 30)).slice(0, 15).map(d => ({ ...d, link: DART_LINK(d.rcept) }));
+        return res.status(200).json({ status: "ok", items });
+      }
+      const codes = qv("dartbad").split(",").filter(c => CODE_RE.test(c)).slice(0, 15);
+      const cc = await corpCodes(codes), bad = {};
+      for (const c of codes) {
+        if (!cc[c] || cc[c] === "-") continue;
+        try { const r = (await dartList(cc[c], 3)).filter(d => d.cls && d.cls.lv === "red"); if (r.length) bad[c] = r.map(d => ({ tag: d.cls.tag, link: DART_LINK(d.rcept), date: d.date })); } catch (e) {}
+      }
+      return res.status(200).json({ status: "ok", bad });
     }
 
     // ⭐ 종목코드로 이름 찾기: /api/closing?lookup=005930
