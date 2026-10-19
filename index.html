@@ -239,6 +239,20 @@
   .phsteps{list-style:none;margin:6px 0 8px;padding:0;font-size:12.5px;line-height:1.9} .phsteps li.ok{color:var(--faint)}
   .phsteps code{background:#f3f4f8;padding:1px 6px;border-radius:5px;font-size:11.5px}
   #phoneCard .pill-btn{white-space:nowrap;flex:none}
+  .buyform{max-width:360px}
+  .buyform h3{margin:0 0 12px;font-size:17px}
+  .buyform label{display:block;margin:0 0 10px}
+  .buyform label span,.buyform .bf-lab{display:block;font-size:12px;color:var(--sub);margin-bottom:4px}
+  .buyform input{width:100%;box-sizing:border-box;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font-size:15px;font-family:inherit;background:#fff;color:#222}
+  .buyform .bf-row{display:flex;gap:10px} .buyform .bf-row label{flex:1}
+  .buyform .bf-hint{font-size:11.5px;color:var(--faint);margin:-4px 0 10px}
+  .bf-mode,.bf-mood{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+  .bf-mode button,.bf-mood button{flex:1;padding:8px 6px;border-radius:10px !important;border:1px solid var(--line);background:#fff;color:var(--sub);font-size:13px;white-space:nowrap}
+  .bf-mode button small{font-size:10px;color:var(--faint)}
+  .bf-mode button.on,.bf-mood button.on{background:var(--chip);border-color:var(--accent);color:var(--accent);font-weight:700}
+  .bf-save{width:100%;margin-top:6px;padding:11px;border-radius:12px !important;background:var(--accent);color:#fff;border:none;font-size:15px;font-weight:700}
+  .wl-item .paper{font-size:11px;background:#f1ecff;color:#6b46c1;border-radius:99px;padding:1px 7px;margin-left:4px}
+  .journal .jtabs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0} .journal .jtabs span{font-size:11.5px;background:#f6f7fb;border-radius:8px;padding:3px 8px;color:var(--sub)}
   .dlist{list-style:none;margin:2px 0 8px;padding:0;font-size:12px}
   .dlist li{display:flex;gap:6px;align-items:baseline;padding:3px 0;border-bottom:1px dashed var(--line)}
   .dlist li a{flex:1;color:var(--ink,#222);text-decoration:none} .dlist li a:hover{text-decoration:underline}
@@ -347,6 +361,23 @@
 
   footer{text-align:center;font-size:12px;line-height:1.7;color:var(--faint);margin-top:26px}
   footer a{color:var(--faint)}
+
+  /* 🌙 저녁 탭 다크 모드 — body.dusk 일 때만 (저녁 계기판 탭) */
+  body.dusk{--bg:#141b2d;--card:#1d2740;--line:#2f3d5e;--text:#dfe7f7;--sub:#a9b8d6;--faint:#7486aa;--accent:#6f9cf0;--chip:#26365a;--up:#ff6b63;--down:#5c9dff}
+  html:has(body.dusk){background:#0e1422}
+  body.dusk{background:var(--bg);color:var(--text)}
+  body.dusk .card{border-color:#26324f;box-shadow:0 2px 4px rgba(0,0,0,.25),0 8px 18px -6px rgba(0,0,0,.45)}
+  body.dusk .banner.warn{background:#2c2614;border-left-color:#e0a800}
+  body.dusk .banner ul.s0 li.bad{color:#f6b05c}
+  body.dusk .memo{background:#18213a;color:var(--sub)}
+  body.dusk .night{background:#202c4d}
+  body.dusk .dartbad{background:#2c2614;color:#f6b05c} body.dusk .dartbad a{color:#f6b05c}
+  body.dusk .detail{background:#18213a}
+  body.dusk .chip.up{background:#3a2024;color:#ff8f88} body.dusk .chip.down{background:#1c2b4d;color:#8fb6ff} body.dusk .chip.hot{background:#3a3016;color:#f2c14e}
+  body.dusk .tip{background:#26365a;color:#9fc0ff}
+  body.dusk .help-btn{background:#1d2740;color:#9fc0ff;border-color:#3a4f7d}
+  body.dusk .tabs button:not(.on){color:var(--sub)}
+  body.dusk #heroImg{filter:brightness(.82) saturate(.9)}
 </style>
 </head>
 <body>
@@ -422,6 +453,37 @@
     </div>
     <div class="card wl-alert" id="phoneCard"></div>
   </section>
+</div>
+
+<div class="modal" id="buyModal" hidden>
+  <div class="modal-card buyform" role="dialog" aria-modal="true">
+    <button class="modal-x" id="buyClose" aria-label="닫기">×</button>
+    <h3 id="buyTitle">💰 매수 기록</h3>
+    <p class="bf-lab" style="margin:0 0 4px"><i class="tip" data-tip="buy_mode">?</i>어떤 매수인가요?</p>
+    <div class="bf-mode" id="bfMode">
+      <button type="button" data-mode="real" class="on">💰 실전</button>
+      <button type="button" data-mode="paper">🧪 연습 <small>(돈 없이 기록만)</small></button>
+    </div>
+    <div class="bf-row">
+      <label style="flex:1.4"><span>매수가 (1주 평균 단가)</span><input id="bfBuy" inputmode="decimal" autocomplete="off"></label>
+      <label><span><i class="tip" data-tip="buy_qty">?</i>수량 (주)</span><input id="bfQty" inputmode="numeric" placeholder="선택"></label>
+    </div>
+    <p class="bf-hint" id="bfTotal" style="margin-top:-4px"></p>
+    <div class="bf-row">
+      <label><span>손절선 %</span><input id="bfStop" inputmode="decimal"></label>
+      <label><span>목표 %</span><input id="bfTake" inputmode="decimal"></label>
+    </div>
+    <p class="bf-hint" id="bfHint"></p>
+    <label><span>왜 샀나요? (한 줄)</span><input id="bfWhy" placeholder="예: 20일선 회복 + 외국인 매수"></label>
+    <span class="bf-lab"><i class="tip" data-tip="buy_mood">?</i>지금 기분은?</span>
+    <div class="bf-mood" id="bfMood">
+      <button type="button" data-mood="sure">😎 확신</button>
+      <button type="button" data-mood="worry">😟 불안</button>
+      <button type="button" data-mood="impulse">⚡ 충동</button>
+      <button type="button" data-mood="follow">👥 남 따라</button>
+    </div>
+    <button class="bf-save" id="bfSave">저장</button>
+  </div>
 </div>
 
 <div class="modal" id="helpModal" hidden>
@@ -866,6 +928,7 @@ document.querySelectorAll(".tabs button").forEach(b => b.addEventListener("click
   hero.src = am ? "hero-am.jpg" : "hero-pm.jpg";
   hero.alt = am ? "미국장의 흔적을 살피고, 한국장의 아침을 준비합니다. MORNING MARKET"
                 : "오늘의 장 마감 흔적을 보고, 내일을 준비하는 작은 계기판. EVENING MARKET";
+  document.body.classList.toggle("dusk", currentTab === "closing");
   if (currentTab === "closing") { renderCbTime(); if (!cbLoaded || Date.now() - cbLastAt > 5*60*1000) loadClosing(); }
 }));
 
@@ -1042,6 +1105,7 @@ async function fillResults(){
     }
     if (changed){
       ls.set("mm_record", rec);
+      if (typeof PUSH !== "undefined" && PUSH && PUSH.store) schedulePushSync();
       const box = document.getElementById("cbReport");
       if (box) box.innerHTML = reportHTML();
     }
@@ -1104,7 +1168,7 @@ async function loadClosing(){
   // 아침 계기판 자료가 아직 없으면 먼저 받아 두기 (각자 규칙대로 — 때가 안 됐으면 저장된 값 사용)
   if (!MK) await loadMarket(); if (!DEBT) await loadDebt(); if (!MEMO) await loadMemo();
   const s0 = stage0(j);
-  saveTrail(c); recordCandidates(c, s0); renderCbTime();
+  saveTrail(c); recordCandidates(c, s0); renderCbTime(); if (typeof schedulePushSync === "function" && PUSH && PUSH.store) schedulePushSync();
   let html = "";
   // 0단계 · 시장 위험 점검
   const lvT = { stop: ["🛑", "오늘은 종가베팅 <b>쉬어가기</b> 권장"], warn: ["⚠️", "하더라도 <b>평소의 절반</b>만, 손절은 꼭"], ok: ["✅", "<b>평소대로</b> — 큰 위험 신호 없음"] }[s0.level];
@@ -1164,6 +1228,16 @@ setInterval(fillResults, 10 * 60 * 1000);
 const HOLD_DEF = { stop: -7, take: 10 };
 /* 📌 업데이트 기록 — 새로 바꿀 때마다 맨 위에 추가 */
 const UPDATE_LOG = [
+  { date:"2026.10.19", tab:"watch", items:[
+    ["🧪 연습 매매 모드", "규칙을 공부한 뒤 바로 돈을 넣기보다, 먼저 '샀다 치고' 기록만 해서 실력을 확인하려고. 💰 매수 → 🧪 연습을 고르면 실전과 똑같이 손절·목표 알림이 오지만(제목에 🧪 연습), 매매일지에는 연습끼리 따로 성적이 묶여요."],
+    ["🙂 매수할 때 기분 태그", "😎확신·😟불안·⚡충동·👥남 따라 중 하나를 고르면, 매매일지에서 기분별 승률이 나와요. '충동 매수는 대부분 잃는다' 같은 내 습관을 숫자로 확인하려는 것."],
+    ["💵 수량 → 원(₩) 손익", "%만으로는 감이 덜 와서. 매수 기록에 수량(주)을 넣으면 보유 카드에 '+12,300원', 매매 일지에 건별·합계 손익(실전/연습 따로)이 나와요. 금요일 주간 리포트에도 이번 주 손익 금액이 붙어요."],
+    ["이익÷손실 비율", "승률만 보면 착각하기 쉬워서. 이긴 매매 평균 수익 ÷ 진 매매 평균 손실 — 1보다 크면 '이길 때 더 많이 번다'는 뜻. 승률 40%여도 이 값이 2면 남는 장사예요."],
+    ["📬 금요일 주간 리포트", "한 주를 돌아보는 습관용. 금요일 18시에 폰으로: 이번 주 알림 몇 번 왔는지, 성적표(🟢/🟡), 매매일지 요약, 다음 주 큰 미국 발표."],
+  ]},
+  { date:"2026.10.19", tab:"closing", items:[
+    ["🌙 저녁 탭 다크 모드", "아침은 밝게, 저녁은 차분하게. 저녁 계기판 탭을 열 때만 화면이 밤 색으로 바뀌어 눈이 덜 피곤해요. 다른 탭으로 가면 원래 밝은 색으로 돌아와요."],
+  ]},
   { date:"2026.10.16", tab:"morning", items:[
     ["🤖 자동 아침 메모", "매일 아침 직접 메모를 쓰기 어려워서. 간밤 미국 ETF·한국 체온·빚투·경제 발표를 규칙대로 묶어 한 줄 정리(평소대로/작게/쉬어가기)까지 자동으로."],
   ]},
@@ -1508,16 +1582,30 @@ function renderWatch(){
   body.innerHTML = group("💰 보유 중", held, "g_hold") + group("👀 관심 (매수 전)", look, "g_look") + journalHTML();
 }
 function tipHTML(k){ return `<i class="tip" data-tip="${k}">?</i>`; }
+function journalGroups(j){
+  const stat = a => a.length ? `${a.length}번 · ${Math.round(a.filter(x => x.ret > 0).length / a.length * 100)}% · ${pct(avg(a.map(x => x.ret)))}` : null;
+  const parts = [];
+  const real = j.filter(x => !x.paper), paper = j.filter(x => x.paper);
+  if (paper.length) { parts.push(`💰 실전 ${stat(real) || "없음"}`); parts.push(`🧪 연습 ${stat(paper)}`); }
+  Object.entries(MOODS).forEach(([k, t]) => { const a = j.filter(x => x.mood === k); if (a.length) parts.push(`${t} ${stat(a)}`); });
+  return parts.length ? `<div class="jtabs">${tipHTML("j_groups")}${parts.map(p => `<span>${p}</span>`).join("")}</div>` : "";
+}
 function journalHTML(){
   const j = store.get("mm_journal", []);
   if (!j.length) return `<p class="wl-group">${tipHTML("journal")}📒 매매 일지</p><div class="card empty" style="font-size:12.5px">아직 기록이 없어요.<br>보유 종목에서 <b>✅ 팔았어요</b>를 누르면 여기에 쌓입니다.</div>`;
   const win = j.filter(x => x.ret > 0).length;
   const d = s => s ? `${s.slice(4,6)}/${s.slice(6)}` : "";
   return `<p class="wl-group">${tipHTML("journal")}📒 매매 일지 <span>${j.length}</span></p><div class="card journal">
-    <p class="jsum">${j.length}번 중 ${win}번 수익 (${Math.round(win / j.length * 100)}%) · 평균 <b class="${avg(j.map(x => x.ret)) >= 0 ? "up" : "down"}">${pct(avg(j.map(x => x.ret)))}</b></p>
+    <p class="jsum">${j.length}번 중 ${win}번 수익 (${Math.round(win / j.length * 100)}%) · 평균 <b class="${avg(j.map(x => x.ret)) >= 0 ? "up" : "down"}">${pct(avg(j.map(x => x.ret)))}</b>${(() => { const ws = j.filter(x => x.ret > 0), ls = j.filter(x => x.ret <= 0); return ws.length && ls.length ? ` · ${tipHTML("j_pl")}이익÷손실 <b>${(avg(ws.map(x => x.ret)) / Math.abs(avg(ls.map(x => x.ret)))).toFixed(2)}</b>` : ""; })()}</p>
+    ${(() => { const sum = a => a.filter(x => x.pnl != null).reduce((t, x) => t + x.pnl, 0), has = a => a.some(x => x.pnl != null);
+      const r = j.filter(x => !x.paper), pp = j.filter(x => x.paper), out = [];
+      if (has(r)) out.push(`💰 실전 <b class="${sum(r) >= 0 ? "up" : "down"}">${wonPL(sum(r))}</b>`);
+      if (has(pp)) out.push(`🧪 연습 <b class="${sum(pp) >= 0 ? "up" : "down"}">${wonPL(sum(pp))}</b>`);
+      return out.length ? `<p class="jsum">${tipHTML("j_won")}손익 합계 · ${out.join(" · ")}</p>` : ""; })()}
+    ${journalGroups(j)}
     ${j.slice(0, 30).map((x, k) => `<div class="jrow">
-      <div><b>${esc(x.name)}</b> <small>${d(x.buyDate)}→${d(x.sellDate)}</small><span class="${x.ret >= 0 ? "up" : "down"}">${pct(x.ret)}</span></div>
-      <small>${x.buy.toLocaleString()} → ${x.sell.toLocaleString()}</small>
+      <div><b>${esc(x.name)}</b>${x.paper ? `<span class="paper" style="font-size:10px;background:#f1ecff;color:#6b46c1;border-radius:99px;padding:0 6px">🧪</span>` : ""}${x.mood ? ` <small>${MOODS[x.mood]}</small>` : ""} <small>${d(x.buyDate)}→${d(x.sellDate)}</small><span class="${x.ret >= 0 ? "up" : "down"}">${pct(x.ret)}</span></div>
+      <small>${x.buy.toLocaleString()} → ${x.sell.toLocaleString()}${x.qty ? ` · ${x.qty.toLocaleString()}주 <b class="${x.pnl >= 0 ? "up" : "down"}">${wonPL(x.pnl)}</b>` : ""}</small>
       ${x.why ? `<p>📝 산 이유: ${esc(x.why)}</p>` : ""}${x.memo ? `<p>💭 ${esc(x.memo)}</p>` : ""}
       <button class="jdel" data-i="${k}" data-act="jdel">지우기</button></div>`).join("")}</div>`;
 }
@@ -1527,6 +1615,8 @@ function ovHTML(w){
   return `<div class="ov ${o.lv}">${tipHTML("ov")}<b>${o.name}</b>${o.why.length ? ` <span>· ${o.why.join(", ")}</span>` : ""}<small>${tipHTML("trend")}${o.facts[0]}${o.facts.slice(1).map(f => ` · ${tipHTML(f.startsWith("20일") ? "rs" : "atr")}${f}`).join("")}</small></div>`;
 }
 
+// 원 단위 손익 표시: +12,300원 / −4,500원
+function wonPL(v){ return (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(Math.round(v)).toLocaleString() + "원"; }
 function holdHTML(w, i){
   if (!w.buy) return "";
   const my = myRet(w), q = wlQuotes[w.code];
@@ -1537,8 +1627,9 @@ function holdHTML(w, i){
   const st = stats(w.code);
   const sug = st && st.stopSuggest != null && st.stopSuggest !== w.stop ? `<span class="sug">${tipHTML("stopsug")}이 종목 권장 손절 ${st.stopSuggest}% (평소 하루 ${st.atrPct}% 움직임)</span>` : "";
   return `<div class="hold ${cls}">
-    <span>${tipHTML("buy")}내 매수가 ${w.buy.toLocaleString()}</span>
-    <b class="${my == null ? "" : my >= 0 ? "up" : "down"}">${my == null ? "–" : pct(my)}</b>
+    <span>${tipHTML("buy")}내 매수가 ${w.buy.toLocaleString()}${w.paper ? `<span class="paper">🧪 연습</span>` : ""}${w.mood ? ` <small>${MOODS[w.mood]}</small>` : ""}</span>
+    <b class="${my == null ? "" : my >= 0 ? "up" : "down"}">${my == null ? "–" : pct(my)}${w.qty && q && q.price ? ` <small style="font-size:12px">${wonPL((q.price - w.buy) * w.qty)}</small>` : ""}</b>
+    ${w.qty ? `<span style="flex-basis:100%;font-size:11.5px;color:var(--faint)">${tipHTML("buy_qty")}${w.qty.toLocaleString()}주 · 투자금 ${Math.round(w.buy * w.qty).toLocaleString()}원${q && q.price ? ` → 지금 ${Math.round(q.price * w.qty).toLocaleString()}원` : ""}</span>` : ""}
     <span style="margin-left:auto">${tipHTML("stoptake")}손절 ${sp.toLocaleString()} · 목표 ${tp.toLocaleString()}</span>
     ${posBar}${sug}
     ${w.why ? `<span class="why">${tipHTML("why")}📝 ${esc(w.why)}${w.buyDate ? ` · ${w.buyDate.slice(4,6)}/${w.buyDate.slice(6)} 매수` : ""}</span>` : ""}
@@ -1609,24 +1700,7 @@ document.getElementById("wlBody").addEventListener("click", async e => {
     }
     return;
   }
-  if (act === "buy"){
-    const first = !w.buy, st = stats(w.code);
-    const cur = (wlQuotes[w.code] || {}).price;
-    const v = prompt(`${w.name} 매수가 (1주 평균 단가)`, w.buy || cur || "");
-    if (v === null) return;
-    const n = Number(String(v).replace(/[^\d.]/g, ""));
-    if (!n) return;
-    w.buy = n;
-    const defStop = first && st && st.stopSuggest != null ? st.stopSuggest : w.stop;
-    const sp = prompt(`손절선 (매수가 대비 %)${st && st.stopSuggest != null ? `\n이 종목은 평소 하루 ${st.atrPct}% 움직여서 ${st.stopSuggest}%를 권장해요.` : ""}`, defStop);
-    if (sp !== null && +sp <= -1 && +sp >= -50) w.stop = +sp; else if (first) w.stop = defStop;
-    const tk = prompt(`목표 수익 (매수가 대비 %)`, w.take); if (tk !== null && +tk >= 1 && +tk <= 100) w.take = +tk;
-    const why = prompt(`왜 샀나요? 한 줄 메모 (나중에 복기용)\n예: 20일선 회복 + 외국인 매수`, w.why || "");
-    if (why !== null) w.why = why.trim();
-    if (first) w.buyDate = todayKey();
-    w.on = true;
-    saveWatch(); renderWatch(); checkAlerts(); return;
-  }
+  if (act === "buy"){ openBuy(w); return; }
   if (act === "sell"){
     const cur = (wlQuotes[w.code] || {}).price;
     const v = prompt(`${w.name} 판 가격 (1주)`, cur || "");
@@ -1636,9 +1710,11 @@ document.getElementById("wlBody").addEventListener("click", async e => {
     const memo = prompt(`팔고 나서 한 줄 (잘한 점·아쉬운 점)`, "") || "";
     const j = store.get("mm_journal", []);
     j.unshift({ code: w.code, name: w.name, buy: w.buy, sell: n, ret: +(((n / w.buy) - 1) * 100).toFixed(2),
-      why: w.why || "", memo: memo.trim(), buyDate: w.buyDate || "", sellDate: todayKey() });
+      why: w.why || "", memo: memo.trim(), buyDate: w.buyDate || "", sellDate: todayKey(), paper: !!w.paper, mood: w.mood || null,
+      qty: w.qty || null, pnl: w.qty ? Math.round((n - w.buy) * w.qty) : null });
     store.set("mm_journal", j.slice(0, 200));
-    w.buy = null; w.why = ""; w.buyDate = "";
+    w.buy = null; w.why = ""; w.buyDate = ""; w.paper = false; w.mood = null; w.qty = null;
+    schedulePushSync();
     saveWatch(); renderWatch(); return;
   }
   if (act === "jdel"){
@@ -1730,16 +1806,81 @@ setInterval(() => { if ((marketOpen() || afterHours()) && watch.length) loadWatc
 setInterval(() => { if (currentTab !== "morning") return; const c = ls.get("mm_market", null); if (!c || mkNeedsFetch(c)) loadMarket(); const d = ls.get("mm_debt", null); if (!d || d.slot !== debtSlot()) loadDebt(); }, 60 * 1000);
 document.getElementById("refresh").addEventListener("click", refresh);
 refresh();
+/* ── 💰 매수 기록 입력 창 (실전/연습 · 기분) ── */
+const MOODS = { sure:"😎 확신", worry:"😟 불안", impulse:"⚡ 충동", follow:"👥 남 따라" };
+let buyFor = null;
+function openBuy(w){
+  buyFor = w;
+  const first = !w.buy, st = stats(w.code), cur = (wlQuotes[w.code] || {}).price;
+  const $ = id => document.getElementById(id);
+  $("buyTitle").textContent = `💰 ${w.name} ${first ? "매수 기록" : "기록 수정"}`;
+  $("bfBuy").value = w.buy || cur || "";
+  $("bfStop").value = first && st && st.stopSuggest != null ? st.stopSuggest : w.stop;
+  $("bfTake").value = w.take;
+  $("bfWhy").value = w.why || "";
+  $("bfQty").value = w.qty || "";
+  bfTotal();
+  $("bfHint").textContent = st && st.stopSuggest != null ? `이 종목은 평소 하루 ${st.atrPct}% 움직여서 손절 ${st.stopSuggest}%를 권장해요.` : "손절선은 목표보다 작게 잡는 게 원칙이에요.";
+  document.querySelectorAll("#bfMode button").forEach(b => b.classList.toggle("on", b.dataset.mode === (w.paper ? "paper" : "real")));
+  document.querySelectorAll("#bfMood button").forEach(b => b.classList.toggle("on", b.dataset.mood === w.mood));
+  $("buyModal").hidden = false;
+  setTimeout(() => $("bfBuy").focus(), 50);
+}
+function bfTotal(){
+  const n = Number(String(document.getElementById("bfBuy").value).replace(/[^\d.]/g, "")), q = Number(String(document.getElementById("bfQty").value).replace(/[^\d]/g, ""));
+  document.getElementById("bfTotal").textContent = n && q ? `= 투자금 ${Math.round(n * q).toLocaleString()}원` : "수량을 넣으면 손익이 원(₩)으로도 나와요. (안 넣어도 돼요)";
+}
+["bfBuy","bfQty"].forEach(id => document.getElementById(id).addEventListener("input", bfTotal));
+document.getElementById("bfMode").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; document.querySelectorAll("#bfMode button").forEach(x => x.classList.toggle("on", x === b)); });
+document.getElementById("bfMood").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; const was = b.classList.contains("on"); document.querySelectorAll("#bfMood button").forEach(x => x.classList.remove("on")); if (!was) b.classList.add("on"); });
+document.getElementById("buyClose").addEventListener("click", () => document.getElementById("buyModal").hidden = true);
+document.getElementById("buyModal").addEventListener("click", e => { if (e.target.id === "buyModal") e.currentTarget.hidden = true; });
+document.getElementById("bfSave").addEventListener("click", () => {
+  const w = buyFor; if (!w) return;
+  const $ = id => document.getElementById(id);
+  const n = Number(String($("bfBuy").value).replace(/[^\d.]/g, ""));
+  if (!n) { alert("매수가를 넣어 주세요."); return; }
+  const sp = +$("bfStop").value, tk = +$("bfTake").value;
+  if (!(sp <= -1 && sp >= -50)) { alert("손절선은 −1 ~ −50 사이로 넣어 주세요 (예: −7)."); return; }
+  if (!(tk >= 1 && tk <= 100)) { alert("목표는 1 ~ 100 사이로 넣어 주세요 (예: 10)."); return; }
+  const first = !w.buy;
+  w.buy = n; w.stop = sp; w.take = tk; w.why = $("bfWhy").value.trim();
+  w.qty = Number(String($("bfQty").value).replace(/[^\d]/g, "")) || null;
+  w.paper = (document.querySelector("#bfMode button.on") || {}).dataset?.mode === "paper";
+  w.mood = (document.querySelector("#bfMood button.on") || {}).dataset?.mood || null;
+  if (first) w.buyDate = todayKey();
+  w.on = true;
+  $("buyModal").hidden = true;
+  saveWatch(); renderWatch(); checkAlerts();
+});
+
 /* ── 📱 휴대폰 알림 (앱을 닫아도) ── */
 let PUSH = null, pushTimer = null;
 async function pushSync(){
   if (location.protocol === "file:" || !PUSH || !PUSH.store) return;
   try {
     const r = await fetch("/api/closing?push=sync", { method: "POST", headers: { "content-type": "application/json", "x-app-password": getPass() },
-      body: JSON.stringify({ watch: watch.map(w => ({ code: w.code, name: w.name, on: w.on, th: w.th, dir: w.dir, buy: w.buy || null, stop: w.stop, take: w.take })) }) });
+      body: JSON.stringify({ watch: watch.map(w => ({ code: w.code, name: w.name, on: w.on, th: w.th, dir: w.dir, buy: w.buy || null, stop: w.stop, take: w.take, paper: !!w.paper })), stats: weekStats() }) });
     const j = await r.json();
     if (j.status === "ok") { PUSH.count = j.saved; store.set("mm_push_synced", Date.now()); renderPhone(); }
   } catch(e) {}
+}
+/* 주간 리포트용 요약 (성적표·일지) — 서버에 함께 보냄 */
+function weekStats(){
+  const now = new Date(Date.now() + 9 * 3600e3); now.setUTCDate(now.getUTCDate() - ((now.getUTCDay() + 6) % 7));
+  const mon = now.toISOString().slice(0, 10).replace(/-/g, "");
+  const rec = (typeof ls !== "undefined" ? ls.get("mm_record", {}) : {}) || {};
+  const r = { g:{n:0,hit:0}, y:{n:0,hit:0}, allG:{n:0,hit:0}, allY:{n:0,hit:0}, s0:{} };
+  Object.entries(rec).forEach(([d, v]) => {
+    (v.items || []).forEach(i => { if (i.ret == null) return; const hit = i.ret > 0 ? 1 : 0;
+      const all = i.signal === "green" ? r.allG : r.allY; all.n++; all.hit += hit;
+      if (d >= mon) { const x = i.signal === "green" ? r.g : r.y; x.n++; x.hit += hit; } });
+    if (d >= mon && v.s0) r.s0[v.s0] = (r.s0[v.s0] || 0) + 1;
+  });
+  const j = store.get("mm_journal", []), wj = j.filter(x => x.sellDate >= mon);
+  const mood = Object.entries(MOODS).map(([k, t]) => { const a = j.filter(x => x.mood === k); return a.length ? `${t} ${Math.round(a.filter(x => x.ret > 0).length / a.length * 100)}%(${a.length})` : null; }).filter(Boolean).join(" · ");
+  const wsum = a => a.filter(x => x.pnl != null).reduce((t, x) => t + x.pnl, 0);
+  return { record: r, journal: { weekWon: wj.some(x => !x.paper && x.pnl != null) ? wsum(wj.filter(x => !x.paper)) : null, weekPaperWon: wj.some(x => x.paper && x.pnl != null) ? wsum(wj.filter(x => x.paper)) : null, weekN: wj.length, weekAvg: wj.length ? +avg(wj.map(x => x.ret)).toFixed(2) : 0, holding: watch.filter(w => w.buy).length, paperHolding: watch.filter(w => w.buy && w.paper).length, mood } };
 }
 function schedulePushSync(){ clearTimeout(pushTimer); pushTimer = setTimeout(pushSync, 1500); }
 function renderPhone(){
@@ -1760,8 +1901,11 @@ function renderPhone(){
     </ul>
     <p>${ready ? `✅ 켜짐 · 서버에 ${p.count ?? 0}종목 저장됨${synced ? ` (${new Date(synced).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} 보냄)` : ""}<br><small>마지막 장중 확인: ${p.lastRun ? esc(p.lastRun) : "아직 없음"}${p.ping ? ` · 장 밖 호출 ${esc(p.ping)}` : ""}</small>`
       : `설정이 끝나면 장중(09:00~15:30) 10분마다 서버가 대신 확인해서 <b>손절선 · 손절 절반 · 목표 · 하루 등락 기준</b>에 닿으면, 그리고 <b>🌪 시장 전체가 급변</b>하면 휴대폰으로 알려 줘요.`}</p>
-    ${p.storeError ? `<p class="errinfo">${esc(p.storeError)}</p>` : ""}`}`;
+    ${p.storeError ? `<p class="errinfo">${esc(p.storeError)}</p>` : ""}
+    ${ready ? `<p style="margin-top:8px">${tipHTML("weekly")}📬 금요일 18시에 주간 리포트가 와요 <button class="pill-btn" id="phWeekly" style="font-size:11px;padding:3px 10px">미리 보기</button></p>` : ""}`}`;
   const b = document.getElementById("phTest");
+  const wb = document.getElementById("phWeekly");
+  if (wb) wb.onclick = async () => { await pushSync(); wb.textContent = "보내는 중…"; try { const j = await api("push=weekly"); wb.textContent = j.status === "ok" ? "보냈어요 ✓" : "실패"; } catch(e) { wb.textContent = "실패"; } };
   if (b) b.onclick = async () => { b.textContent = "보내는 중…"; try { const j = await api("push=test"); b.textContent = j.status === "ok" ? "보냈어요 ✓" : "실패"; } catch(e) { b.textContent = "실패"; } };
 }
 async function loadPhone(){
@@ -1773,6 +1917,13 @@ async function loadPhone(){
 
 /* ── ? 메모 (마우스를 올리거나 누르면 설명) ── */
 const TIPS = {
+  buy_qty:["수량 (주)", "몇 주를 샀는지(연습이면 '샀다 치는' 주 수). 넣으면 보유 카드와 매매 일지에 <b>원(₩) 단위 손익</b>이 같이 나와요.<br>계산: (지금가 − 매수가) × 수량. 수수료·세금은 빠진 대략값이에요.", "안 넣어도 % 수익률은 그대로 나와요. 일부만 팔았으면 ✏️ 수정에서 남은 수량으로 고쳐 주세요."],
+  j_won:["손익 합계 (원)", "수량을 넣고 판 매매만 모아 <b>(판 가격 − 매수가) × 수량</b>을 더한 값. 실전과 🧪 연습은 따로 더해요.", "수수료·세금(매도 때 약 0.2%)은 빠져 있어서 실제 계좌보다 조금 많게 보여요."],
+  j_pl:["이익÷손실 비율", "<b>이긴 매매의 평균 수익률 ÷ 진 매매의 평균 손실률(절댓값)</b>.<br>예) 이길 때 평균 +6%, 질 때 평균 −3% → 2.00<br>• 1보다 크면: 이길 때 더 많이 번다 (좋음)<br>• 1보다 작으면: 조금씩 벌고 크게 잃는 습관 → 손절선을 더 지키기", "근거: 승률만으로는 수익이 안 보여요. 추세 추종 전략은 승률 40%대여도 이 값이 2 이상이라 남는 경우가 많아요. 이긴·진 매매가 각각 1건 이상일 때만 표시."],
+  j_groups:["묶음별 성적", "매매일지를 <b>실전/🧪연습</b>, 그리고 매수 때 고른 <b>기분</b>별로 나눠 승률과 평균 수익을 보여줘요.", "근거: 내 실수 패턴(예: ⚡충동 매수의 승률이 낮다)은 숫자로 봐야 고쳐져요. 건수가 적을 땐(3건 미만) 우연일 수 있으니 참고만."],
+  weekly:["📬 주간 리포트", "매주 <b>금요일 18:00~18:10</b>에 폰(ntfy)으로 한 번 와요. 내용: 이번 주 알림 횟수(시장·관심종목·공시), 종가베팅 성적표, 매매일지 요약(이번 주 매도 건수·평균, 보유 중/연습 중 개수, 기분별), 다음 주 큰 미국 발표.<br><b>미리 보기</b>를 누르면 지금 바로 한 번 보내요.", "방식: 앱이 성적 요약만 서버(Redis)에 올려두고, 10분마다 도는 cron이 금요일 18시에 보내요. 조용한 '기본' 알림이라 소리는 안 나요."],
+  buy_mode:["💰 실전 / 🧪 연습", "<b>실전</b>: 실제로 산 종목. <b>연습</b>: 돈 없이 '샀다 치고' 기록만.<br>둘 다 손절·목표 알림이 똑같이 오지만, 연습은 제목에 🧪 연습이 붙고 가장 시끄러운 단계(최대)는 쓰지 않아요.", "근거: 새 규칙은 먼저 연습으로 몇 주 돌려보고 성적이 괜찮을 때 실전으로 — 돈 잃는 수업료를 줄이기 위해."],
+  buy_mood:["지금 기분은?", "살 때의 마음을 하나 골라요. 나중에 매매일지에서 기분별 승률이 나와요.<br>😎 확신 · 😟 불안 · ⚡ 충동 · 👥 남 따라 (안 골라도 저장돼요)", "근거: 행동재무학에서 충동·추종 매수가 성과를 깎는다는 연구가 많아요. 내 경우에도 그런지 직접 확인하려는 것."],
   c_time:["⏰ 하루 진행 순서","14:30~15:10 회복 관찰 (5분마다 자동 확인)<br>15:10~15:20 최종 정리 → 이때 결과가 성적표에 기록<br>15:20~15:30 동시호가 (기록 고정)<br>15:30 이후 처음 열면 → 종가로 기록<br>다음 날 09:05 이후 → 시초가로 결과 채움","장중에 못 봐도 저녁에 한 번 열면 기록돼요."],
   p_buy:["💰 샀어요 (매수 기록)","누르면 차례로 묻습니다: ① 매수가(평균 단가) → ② 손절선 (이 종목 권장값이 기본) → ③ 목표 수익 → ④ 산 이유 한 줄.","그다음부터 '보유 중' 묶음으로 옮겨지고 손절·목표 알림이 붙어요."],
   p_edit:["✏️ 수정","매수가·손절선·목표·산 이유를 다시 고칩니다. 물타기(추가 매수)했으면 새 평균 단가로 바꾸세요.",""],
