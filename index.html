@@ -267,7 +267,7 @@
   .wl-item .ov.red b{color:#c0392b} .wl-item .ov.yellow b{color:#b7791f} .wl-item .ov.green b{color:#2f855a}
   .wl-item .hold .sug,.wl-item .hold .why{flex-basis:100%;font-size:11px;color:var(--faint)}
   .wl-item .hold .why{color:var(--sub)}
-  .wl-item .hold .hbtn{flex-basis:100%;display:flex;gap:6px;justify-content:flex-end}
+  .wl-item .hold .hbtn{flex-basis:100%;display:flex;gap:4px;justify-content:flex-end;align-items:center;flex-wrap:wrap} .wl-item .hold .hbtn button{white-space:nowrap;padding:3px 9px !important}
   .wl-item .hold .hbtn button{font-size:11px;padding:3px 10px;border-radius:99px !important;background:#fff;border:1px solid var(--line);color:var(--sub)}
   .journal{padding:6px 14px}
   .journal .jsum{font-size:12.5px;color:var(--sub);margin:6px 0 4px}
@@ -381,6 +381,12 @@
   /* ☁️ 구글 드라이브 */
   .gd-card{padding:12px 14px}
   .gd-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px} .gd-top span{margin-left:auto;font-size:11.5px;color:var(--faint)}
+  .gd-dirty{margin:8px 0 0;padding:8px 10px;border-radius:10px;background:#fff6e5;color:#8a5a00;font-size:12.5px;line-height:1.6}
+  .gd-dirty[hidden]{display:none}
+  .tabs button.gd-dot{position:relative} .tabs button.gd-dot::after{content:"";position:absolute;top:9px;right:12%;width:8px;height:8px;border-radius:50%;background:#e0504a;box-shadow:0 0 0 2px #fff}
+  .gd-btns #gdSave.pulse{animation:gdp 1.6s ease-in-out infinite}
+  @keyframes gdp{0%,100%{box-shadow:0 0 0 0 rgba(59,111,209,.45)}50%{box-shadow:0 0 0 6px rgba(59,111,209,0)}}
+  .gd-note{margin:8px 0 0;font-size:12px;line-height:1.6;color:var(--sub)} .gd-note small{color:var(--faint)}
   .gd-btns{display:flex;gap:8px;margin-top:10px} .gd-btns button{flex:1;padding:9px 6px;border-radius:12px !important;font-size:13px}
   .gd-btns #gdLoad{background:#fff;color:var(--accent);border:1.5px solid #b9cdf3}
   .gd-btns button:disabled{opacity:.5}
@@ -514,6 +520,8 @@
   <section>
     <div class="card gd-card">
       <div class="gd-top"><b><i class="tip" data-tip="gdrive">?</i>☁️ 폰 ↔ PC 같이 보기</b><span id="gdInfo"></span></div>
+      <p class="gd-dirty" id="gdDirty" hidden><i class="tip" data-tip="gd_dirty">?</i>⚠️ 아직 동기화되지 않았어요 — 이 기기에서 바뀐 기록이 있어요. 다른 기기(폰·PC)에도 반영하려면 <b>⬆️ 보내기</b>를 눌러 주세요.</p>
+      <p class="gd-note">기록은 이 기기에만 저장돼요. 폰·PC에서 같이 보려면 구글 드라이브로 <b>보내기 → 받기</b> 하세요. <small>(방법은 ? 를 눌러 보세요)</small></p>
       <div class="gd-btns"><button id="gdSave">⬆️ 보내기</button><button id="gdLoad">⬇️ 받기</button></div>
     </div>
   </section>
@@ -1318,6 +1326,8 @@ const UPDATE_LOG = [
     ["📒 매매기록 탭 새로 만듦", "관심종목 탭에 사고팔기·일지가 섞여 흐름이 산만해서. 이제 '지켜보기·알림'은 ⭐ 관심종목, '사고팔기·성적'은 📒 매매기록으로 나눴어요."],
     ["엑셀 같은 매매 표", "한 줄에 종목·실전/연습·매수일·매수가·수량·매도일·매도가·보유일·수익률·손익. 보유 중은 매도칸이 빈 노란 줄, 팔면 흰 줄로 확정."],
     ["실전 / 연습 표 따로", "한 표에 섞여 있으면 헷갈려서. 💰 실전 표(노란 테두리)와 🧪 연습 표(보라 테두리)를 나누고, 월별 묶음도 각각 따로."],
+    ["⚠️ 아직 동기화 안 됨 표시", "보내기를 잊지 않게. 기록을 고치고 아직 안 보냈으면 매매기록 탭 버튼에 빨간 점, 드라이브 칸에 안내 줄이 뜨고 ⬆️ 보내기 버튼이 살짝 깜빡여요. 화면을 가리는 팝업은 번거로워서 쓰지 않았어요."],
+    ["관심종목 탭에서도 사고팔기", "현황(흐름·신호)을 보면서 바로 사는 게 편해서. ⭐ 관심종목의 💰 샀어요 / ✅ 팔았어요도 그대로 쓸 수 있고, 어디서 하든 매매기록 표에 자동으로 들어가요."],
     ["☁️ 구글 드라이브 동기화", "폰과 PC 기록이 따로 놀아서. 가계부처럼 구글 로그인 → ⬆️ 저장 / ⬇️ 불러오기 버튼으로 같은 기록을 맞춰요 (⬆️ 보내기 / ⬇️ 받기). 파일은 내 드라이브에 'am-pm 매매기록.json'으로 보관 (백업도 겸함)."],
     ["월별로 접기", "기록이 계속 쌓여도 보기 좋게. 판 날짜 기준으로 이번 달은 펼치고, 지난달은 한 줄 요약으로 접어서 아래로."],
     ["매수일·매도일 고르기 + 매도 창", "뒤늦게 적는 매매도 날짜를 맞출 수 있게. 매도는 작은 창에서 판 가격을 넣으면 수익률·손익이 바로 계산돼 보여요."],
@@ -1458,9 +1468,9 @@ const HELP = {
     <h4>🎯 종목별 권장 손절</h4>
     <p>평소 하루 변동폭의 <b>2배</b>를 권장 손절로 제안합니다 (최소 −3%, 최대 −15%). 평소 흔들림 정도로는 안 걸리고, 정말 흐름이 깨졌을 때 걸리게 하는 기준이에요.</p>
     <h4>📒 사고팔기 · 성적은 매매기록 탭에서</h4>
-    <p>매수·매도 기록과 성적표는 <b>📒 매매기록</b> 탭으로 옮겼어요. 이 탭은 '지켜보기·알림' 전용이에요. 보유 종목에는 손절·목표 막대와 알림이 그대로 붙어요.</p>
+    <p>여기서 <b>💰 샀어요 / ✅ 팔았어요</b>를 누르면 <b>📒 매매기록</b> 탭 표와 성적표에 자동으로 들어가요. 매매기록 탭에서 해도 같은 기록이에요.</p>
     <h4>💰 보유 종목 지키기</h4>
-    <p>산 종목은 <b>📒 매매기록</b> 탭에서 매수 기록을 넣으면 여기 💰 보유 중으로 올라와요. 손절선·목표도 그 창에서 정해요.<br>
+    <p>산 종목은 <b>💰 샀어요</b>를 눌러 매수가를 넣으세요 (매매기록 탭에서 해도 같아요). 손절선·목표도 그 창에서 정해요.<br>
     막대의 검은 표시가 <b>왼쪽 끝(손절선) ~ 오른쪽 끝(목표)</b> 사이 어디쯤인지 보여 줍니다.<br>
     <small>기본값 ${HOLD_DEF.stop}% / +${HOLD_DEF.take}%: 우량주 스윙에서 흔히 쓰는 범위. 손실을 이익보다 작게 끊는 게 핵심이에요 (−29%까지 두지 않기).</small></p>
     <h4>알림</h4>
@@ -1492,9 +1502,16 @@ const SUGGEST = [["005930","삼성전자"],["000660","SK하이닉스"],["373220"
   ["247540","에코프로비엠"],["086520","에코프로"],["196170","알테오젠"],["028300","HLB"]];
 document.getElementById("wlList").innerHTML = SUGGEST.map(([c,n]) => `<option value="${n}">${c}</option>`).join("");
 
+// 내가 직접 고치는 기록 — 바뀌면 '아직 안 보냄' 표시 (성적표 자동 기록은 제외)
+const GD_DIRTY_KEYS = ["mm_watch", "mm_journal", "mm_alert_kinds"];
+let gdQuiet = false;   // 드라이브에서 받는 중에는 표시 안 함
 const store = {
   get(k, d){ try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch(e){ return d; } },
-  set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+  set(k, v){ try {
+    const s = JSON.stringify(v), old = localStorage.getItem(k);
+    localStorage.setItem(k, s);
+    if (!gdQuiet && old !== s && GD_DIRTY_KEYS.includes(k)) { localStorage.setItem("mm_gd_dirty", String(Date.now())); if (typeof gdMark === "function") gdMark(); }
+  } catch(e){} }
 };
 let watch = store.get("mm_watch", []);          // [{code,name,th,dir,on, buy?,stop,take}]  buy = 내 매수가 (보유 중일 때만)
 watch.forEach(w => { if (!w.dir) w.dir = "both"; if (w.stop == null) w.stop = HOLD_DEF.stop; if (w.take == null) w.take = HOLD_DEF.take; });
@@ -1677,6 +1694,7 @@ function renderWatch(){
       ${sg.length ? `<div class="chips">${sg.map(x => `<span class="chip ${x.c}">${x.k === "th" ? "🔔 " : ""}${x.t}</span>`).join("")}</div>` : ""}
       <div class="r2">
         <em>${w.code}</em>
+        ${w.buy ? "" : `${tipHTML("p_buy")}<button class="buy" data-i="${i}" data-act="buy">💰 샀어요</button>`}
         ${tipHTML("sw")}<span class="lbl">알림</span><button class="sw ${w.on ? "on" : ""}" data-i="${i}" data-act="sw" title="알림 켜기/끄기"></button>
         ${tipHTML("dir")}<button class="dir" data-i="${i}" data-act="dir">${DIRS[w.dir]}</button>
         <span style="display:inline-flex;align-items:center;gap:4px">${tipHTML("th")}<div class="th"><button data-i="${i}" data-act="minus">−</button><span>${w.th}%</span><button data-i="${i}" data-act="plus">+</button></div></span>
@@ -1741,7 +1759,7 @@ function holdHTML(w, i){
     <span style="margin-left:auto">${tipHTML("stoptake")}손절 ${sp.toLocaleString()} · 목표 ${tp.toLocaleString()}</span>
     ${posBar}${sug}
     ${w.why ? `<span class="why">${tipHTML("why")}📝 ${esc(w.why)}${w.buyDate ? ` · ${w.buyDate.slice(4,6)}/${w.buyDate.slice(6)} 매수` : ""}</span>` : ""}
-    <span class="hbtn">${tipHTML("p_gotrade")}<button data-act="gotrade">📒 매매기록에서 수정·매도 →</button></span></div>`;
+    <span class="hbtn">${tipHTML("p_edit")}<button data-i="${i}" data-act="buy">✏️ 수정</button>${tipHTML("p_sell")}<button data-i="${i}" data-act="tsell2">✅ 팔았어요</button>${tipHTML("p_gotrade")}<button data-act="gotrade">📒 표 보기</button></span></div>`;
 }
 function afterTag(code){
   const a = wlAfter && wlAfter[code];
@@ -1810,6 +1828,7 @@ document.getElementById("wlBody").addEventListener("click", async e => {
   }
   if (act === "gotrade"){ document.querySelector('.tabs button[data-tab="trade"]').click(); window.scrollTo(0, 0); return; }
   if (act === "buy"){ openBuy(w); return; }
+  if (act === "tsell2"){ openSell(w); return; }
   if (act === "sell"){
     const cur = (wlQuotes[w.code] || {}).price;
     const v = prompt(`${w.name} 판 가격 (1주)`, cur || "");
@@ -2071,6 +2090,13 @@ async function gdFind(t){
   return ((await r.json()).files || [])[0] || null;
 }
 function gdSetInfo(t){ document.getElementById("gdInfo").textContent = t; }
+// ⚠️ 아직 다른 기기로 안 보낸 변경이 있으면: 매매기록 탭 버튼에 빨간 점 + 드라이브 칸에 안내 줄
+function gdMark(){
+  const dirty = !!localStorage.getItem("mm_gd_dirty");
+  const tb = document.querySelector('.tabs button[data-tab="trade"]'); if (tb) tb.classList.toggle("gd-dot", dirty);
+  const el = document.getElementById("gdDirty"); if (el) el.hidden = !dirty;
+  const sv = document.getElementById("gdSave"); if (sv) sv.classList.toggle("pulse", dirty);
+}
 function gdLastLabel(){ const x = store.get("mm_gd_last", null); return x ? `마지막: ${x.act} ${x.at}` : "아직 안 함"; }
 async function gdSave(){
   const btn = document.getElementById("gdSave");
@@ -2090,6 +2116,7 @@ async function gdSave(){
     }
     if (!r.ok) throw new Error("저장 실패 (" + r.status + ")");
     const p = kstParts(); store.set("mm_gd_last", { act:"보냄", at:`${p.m}/${p.day} ${pad(p.h)}:${pad(p.mi)}` });
+    localStorage.removeItem("mm_gd_dirty"); gdMark();
     gdSetInfo("✅ 보냈어요 · " + gdLastLabel().replace("마지막: ", ""));
   } catch(e) { gdSetInfo("⚠️ " + e.message); }
   btn.disabled = false;
@@ -2108,7 +2135,8 @@ async function gdLoad(){
     const d = new Date(data.savedAt), when = `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     const jn = (data.keys.mm_journal || []).length, hn = (data.keys.mm_watch || []).filter(w => w.buy).length;
     if (!confirm(`드라이브 기록 (${when}, ${data.device || ""}에서 저장)\n관심종목 ${(data.keys.mm_watch || []).length}개 · 보유 ${hn} · 판 기록 ${jn}건\n\n이 기기의 기록을 이걸로 바꿀까요?`)) { gdSetInfo(gdLastLabel()); btn.disabled = false; return; }
-    GD_KEYS.forEach(k => { if (k in data.keys) store.set(k, data.keys[k]); });
+    gdQuiet = true; GD_KEYS.forEach(k => { if (k in data.keys) store.set(k, data.keys[k]); }); gdQuiet = false;
+    localStorage.removeItem("mm_gd_dirty"); gdMark();
     watch = store.get("mm_watch", []);
     alertOn = { stop:true, warn:true, take:true, ...store.get("mm_alert_kinds", {}) };
     try { renderAlertKinds(); } catch(e) {}
@@ -2120,7 +2148,7 @@ async function gdLoad(){
 }
 document.getElementById("gdSave").addEventListener("click", gdSave);
 document.getElementById("gdLoad").addEventListener("click", gdLoad);
-gdSetInfo(gdLastLabel());
+gdSetInfo(gdLastLabel()); gdMark();
 
 let buyFor = null;
 function openBuy(w){
@@ -2232,7 +2260,8 @@ async function loadPhone(){
 
 /* ── ? 메모 (마우스를 올리거나 누르면 설명) ── */
 const TIPS = {
-  gdrive:["☁️ 폰 ↔ PC 같이 보기 (구글 드라이브)", "<b>폰과 데스크탑에서 같은 기록을 보고 싶다면</b> 이렇게 하세요.<br>① 기록한 기기에서 <b>⬆️ 보내기</b> → 구글 계정 고르기 (처음 한 번만 허용)<br>② 다른 기기에서 <b>⬇️ 받기</b> → 같은 구글 계정 고르기 → '바꿀까요?'에 확인<br>보내는 것: 관심종목 · 매매기록(실전/연습) · 성적표 기록 · 알림 설정.<br>내 구글 드라이브에 'am-pm 매매기록.json' 파일 하나로 보관돼서 백업도 돼요.", "주의: 받기를 하면 그 기기의 기록이 드라이브 것으로 <b>바뀌어요</b>. 그래서 '기록한 쪽에서 보내기 → 보는 쪽에서 받기' 순서를 지키면 돼요. 앱은 자기가 만든 파일만 볼 수 있어서 드라이브의 다른 파일은 못 봐요. 무료."],
+  gd_dirty:["⚠️ 아직 동기화 안 됨", "이 기기에서 관심종목·매매기록·알림 설정을 고친 뒤 아직 <b>⬆️ 보내기</b>를 안 했다는 표시예요. 매매기록 탭 버튼의 <b>빨간 점</b>도 같은 뜻.<br>보내기(또는 받기)를 하면 사라져요.", "다른 기기에서는 ⬇️ 받기를 해야 바뀐 기록이 보여요. 성적표 자동 기록(종가베팅 후보)은 고친 걸로 치지 않아요."],
+  gdrive:["☁️ 폰 ↔ PC 같이 보기 (구글 드라이브)", "<b>먼저 알아 두세요</b><br>이 앱은 기록을 <b>지금 쓰는 기기(브라우저) 안에만</b> 저장해요. 따로 회원가입·계정 서버가 없어서, 폰과 PC 기록은 처음엔 서로 따로예요.<br>다른 기기에서도 같은 기록을 보고 싶다면 <b>내 구글 드라이브로 주고받으면</b> 돼요.<br><br><b>주고받는 방법</b><br>① 기록한 기기에서 <b>⬆️ 보내기</b> → 구글 계정 고르기 (처음 한 번 '허용')<br>② 다른 기기에서 <b>⬇️ 받기</b> → <b>같은 구글 계정</b> 고르기 → '바꿀까요?'에 확인<br>③ 다시 그 기기에서 기록했으면 → 거기서 ⬆️ 보내기 → 반대편에서 ⬇️ 받기", "참고: 폰 알림을 켜 두면 알림 계산용으로 관심종목 목록(코드·매수가·손절·목표)만 알림 서버에 올라가요. 매매일지는 올라가지 않아요."],
   tr_add:["💰 매수 기록", "산 종목(연습이면 '샀다 치는' 종목)의 이름이나 코드를 넣고 누르세요. 매수 창이 열려요: 실전/연습, 매수가, 수량, 산 날짜, 손절·목표, 이유, 기분.", "관심종목에 없던 종목이면 관심종목에도 자동으로 들어가서 손절·목표 폰 알림이 붙어요. (한 종목은 한 번에 하나의 보유 기록만)"],
   tr_sum:["📊 내 성적표", "<b>판 매매만</b> 모아 계산해요 (아직 보유 중인 건 빠짐). 실전과 🧪 연습을 따로.<br>• 몇 번 중 몇 번 수익 (승률)<br>• 평균 수익률 · 이익÷손실<br>• 손익 합계(수량 넣은 것만) · 평균 보유일", "결과가 정해진 매매만 넣어야 숫자가 정확해요. 맨 아래 칩은 기분별 성적."],
   tr_eval:["평가 손익", "아직 안 판 종목을 <b>지금 시세로 팔았다면</b> 얼마인지: (지금가 − 매수가) × 수량의 합.", "수량을 넣은 종목만 더해요. 시세는 관심종목과 같이 갱신돼요."],
@@ -2242,7 +2271,7 @@ const TIPS = {
   tr_real:["💰 실전 매매 표", "실제로 돈을 넣고 산 매매만 모은 표. 노란 테두리.", "연습과 섞이지 않게 따로 — 진짜 내 계좌 성적은 여기만 보면 돼요."],
   tr_paper:["🧪 연습 매매 표", "돈 없이 '샀다 치고' 기록한 매매만 모은 표. 보라 테두리.", "새 규칙을 시험하는 곳. 여기 성적이 몇 주 동안 괜찮으면 실전으로 넘어가기."],
   tr_date:["날짜", "기본은 오늘. 예전 매매를 뒤늦게 적을 때는 그날로 바꾸세요.", "보유 기간과 월별 묶음이 이 날짜로 계산돼요."],
-  p_gotrade:["📒 매매기록 탭", "매수가 고치기, 팔았을 때 기록은 이제 <b>📒 매매기록</b> 탭에서 해요. 누르면 그 탭으로 이동해요.", "관심종목 탭은 '지켜보기·알림', 매매기록 탭은 '사고팔기·성적' — 흐름을 나눠서 덜 산만하게."],
+  p_gotrade:["📒 표 보기", "매매기록 탭의 엑셀 같은 표로 이동해요.", "여기(관심종목)에서 사고팔아도, 매매기록 탭에서 해도 <b>같은 기록</b>이에요 — 어느 쪽에서 하든 표와 성적표에 자동으로 들어가요."],
   buy_qty:["수량 (주)", "몇 주를 샀는지(연습이면 '샀다 치는' 주 수). 넣으면 보유 카드와 매매 일지에 <b>원(₩) 단위 손익</b>이 같이 나와요.<br>계산: (지금가 − 매수가) × 수량. 수수료·세금은 빠진 대략값이에요.", "안 넣어도 % 수익률은 그대로 나와요. 일부만 팔았으면 ✏️ 수정에서 남은 수량으로 고쳐 주세요."],
   j_won:["손익 합계 (원)", "수량을 넣고 판 매매만 모아 <b>(판 가격 − 매수가) × 수량</b>을 더한 값. 실전과 🧪 연습은 따로 더해요.", "수수료·세금(매도 때 약 0.2%)은 빠져 있어서 실제 계좌보다 조금 많게 보여요."],
   j_pl:["이익÷손실 비율", "<b>이긴 매매의 평균 수익률 ÷ 진 매매의 평균 손실률(절댓값)</b>.<br>예) 이길 때 평균 +6%, 질 때 평균 −3% → 2.00<br>• 1보다 크면: 이길 때 더 많이 번다 (좋음)<br>• 1보다 작으면: 조금씩 벌고 크게 잃는 습관 → 손절선을 더 지키기", "근거: 승률만으로는 수익이 안 보여요. 추세 추종 전략은 승률 40%대여도 이 값이 2 이상이라 남는 경우가 많아요. 이긴·진 매매가 각각 1건 이상일 때만 표시."],
@@ -2251,9 +2280,9 @@ const TIPS = {
   buy_mode:["💰 실전 / 🧪 연습", "<b>실전</b>: 실제로 산 종목. <b>연습</b>: 돈 없이 '샀다 치고' 기록만.<br>둘 다 손절·목표 알림이 똑같이 오지만, 연습은 제목에 🧪 연습이 붙고 가장 시끄러운 단계(최대)는 쓰지 않아요.", "근거: 새 규칙은 먼저 연습으로 몇 주 돌려보고 성적이 괜찮을 때 실전으로 — 돈 잃는 수업료를 줄이기 위해."],
   buy_mood:["지금 기분은?", "살 때의 마음을 하나 골라요. 나중에 매매일지에서 기분별 승률이 나와요.<br>😎 확신 · 😟 불안 · ⚡ 충동 · 👥 남 따라 (안 골라도 저장돼요)", "근거: 행동재무학에서 충동·추종 매수가 성과를 깎는다는 연구가 많아요. 내 경우에도 그런지 직접 확인하려는 것."],
   c_time:["⏰ 하루 진행 순서","14:30~15:10 회복 관찰 (5분마다 자동 확인)<br>15:10~15:20 최종 정리 → 이때 결과가 성적표에 기록<br>15:20~15:30 동시호가 (기록 고정)<br>15:30 이후 처음 열면 → 종가로 기록<br>다음 날 09:05 이후 → 시초가로 결과 채움","장중에 못 봐도 저녁에 한 번 열면 기록돼요."],
-  p_buy:["💰 샀어요 (매수 기록)","누르면 차례로 묻습니다: ① 매수가(평균 단가) → ② 손절선 (이 종목 권장값이 기본) → ③ 목표 수익 → ④ 산 이유 한 줄.","그다음부터 '보유 중' 묶음으로 옮겨지고 손절·목표 알림이 붙어요."],
+  p_buy:["💰 샀어요", "이 종목을 샀을 때 누르세요. 매수 창이 열려요: 실전/🧪연습, 매수가, 수량, 산 날짜, 손절·목표, 이유, 기분.", "저장하면 💰 보유 중으로 올라가고, 📒 매매기록 탭 표에도 자동으로 노란 줄(보유 중)이 생겨요."],
   p_edit:["✏️ 수정","매수가·손절선·목표·산 이유를 다시 고칩니다. 물타기(추가 매수)했으면 새 평균 단가로 바꾸세요.",""],
-  p_sell:["✅ 팔았어요 (매도 기록)","판 가격과 한 줄 소감을 넣으면 📒 매매 일지에 저장되고, 이 종목은 '관심' 묶음으로 돌아가요.","일부만 팔았으면 누르지 말고 ✏️ 수정만 (평균 단가는 그대로)."],
+  p_sell:["✅ 팔았어요 (매도 기록)", "판 가격·판 날짜·한 줄 소감을 넣는 창이 열려요. 넣는 순간 수익률·손익이 계산돼 보여요.", "저장하면 📒 매매기록 탭 표에 확정(흰 줄)으로 들어가고, 이 종목은 '관심' 묶음으로 돌아가요. 일부만 팔았으면 ✏️ 수정에서 수량만 고치세요."],
   p_open:["종목 펼쳐 보기","종목 이름을 누르면 시가·고가·저가, 이동평균선, 시장 대비, 변동폭, 최근 5일, 외국인·기관, 뉴스·공시 바로가기가 열려요.",""],
 
   /* 아침 계기판 */
