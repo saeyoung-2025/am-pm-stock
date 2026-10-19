@@ -243,7 +243,7 @@ module.exports = async (req, res) => {
         }
         const ch = x.change;
         if (ch != null && Math.abs(ch) >= w.th && (w.dir === "both" || (w.dir === "up" && ch > 0) || (w.dir === "down" && ch < 0)))
-          hits.push(["th", `🔔 오늘 ${ch > 0 ? "+" : ""}${ch.toFixed(2)}%`, `지금 ${x.price.toLocaleString()}원 · 하루 기준 ${w.th}%를 넘었어요.`, 3]);
+          hits.push(["th", `🔔 오늘 ${ch > 0 ? "+" : ""}${ch.toFixed(2)}%`, `지금 ${x.price.toLocaleString()}원 · 하루 기준 ${w.th}%를 넘었어요.`, 4]);
         for (const [kind, title, msg, pr] of hits) {
           const ok = await redis("SET", `amp:sent:${k.ymd}:${w.code}:${kind}`, "1", "NX", "EX", 90000);   // 같은 종목·같은 신호는 하루 한 번
           if (ok !== "OK") continue;
