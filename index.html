@@ -48,6 +48,10 @@
   /* MSCI 월간 카드 */
   .msci-card{display:flex;align-items:center;padding:6px}
   .mk h3{font-size:15px;margin:2px 0 10px}
+  .banner .s0head{font-size:14.5px;margin:4px 0 6px}
+  .banner ul.s0{list-style:none;margin:0 0 4px;padding:0;font-size:12.5px;line-height:1.85}
+  .banner ul.s0 li.bad{color:#b45309} .banner ul.s0 li b{font-weight:700}
+  .banner.warn{border-left:4px solid #e0a800;background:#fffaf0}
   .automemo p{margin:0 0 7px;font-size:13.5px;line-height:1.7} .automemo small{color:var(--faint)}
   .mk .upd{font-size:11px;color:var(--faint);margin:10px 0 0;text-align:right}
   .eco .tvcal{height:430px;margin:6px -6px 0} .eco .tvnews{height:420px;margin:0 -6px}
@@ -865,6 +869,10 @@ let cbRule = { marketStop:-1.5, dropMin:-2, dropMax:-7, minAmount:100e8, recGood
 const P100 = v => Math.round(v * 100);
 /* 📌 기준 메모 — 기준을 바꿀 때마다 맨 위에 한 덩어리씩 추가 (도움말 팝업에 표시) */
 const RULE_MEMO = [
+  { date:"2026.10.19", items:[
+    ["위험 신호 3개↑ → 🛑", "종가베팅은 밤을 넘기는 매매라 밤사이 위험이 겹치면 쉬기. 1~2개면 절반만 — 완전히 쉬는 것보다 기록을 쌓으며 감을 익히려고."],
+    ["VKOSPI 30", "평소 15~20. 30부터 시장이 '공포'로 보는 구간."],
+  ], next:"성적표가 쌓이면 ✅인 날 vs ⚠️인 날 적중률을 비교해서 기준을 조정." },
   { date:"2026.10.14", items:[
     ["거래대금 100억↑", "200억에서 낮춤. 삼성화재·KT 같은 우량주는 조용한 날 200억이 안 될 때가 있어서. 100억도 개인이 사고팔기엔 충분."],
     ["시장보다 3%p↓ 이면 −1점", "4%p에서 바꿈. 우량주가 시장보다 3%p 넘게 더 빠지면 그 종목만의 나쁜 소식일 가능성이 큼."],
@@ -941,14 +949,41 @@ function trailHTML(code){
 }
 
 /* 4단계: 기록 (15:10~15:30 사이에 마지막으로 본 결과를 그날 기록으로) */
-function recordCandidates(cands){
+/* 0단계 · 시장 위험 점검 — 아침 계기판 자료(VKOSPI·200일선·빚투·경제 발표)를 함께 봄 */
+function stage0(j){
+  const c = [], r = cbRule;
+  const k = (j.market || {}).change;
+  const add = (key, bad, label, val) => c.push({ key, bad, label, val });
+  if (k != null) add("s0_kospi", k <= r.marketStop, "코스피 오늘", pct(k));
+  const vk = MK && MK.vkospi && MK.vkospi.value;
+  if (vk) add("s0_vk", vk >= 30, "VKOSPI (공포지수)", vk.toFixed(1) + (vk >= 40 ? " 극심한 공포" : vk >= 30 ? " 공포" : vk >= 20 ? " 불안" : " 평온"));
+  const cl = (MK && MK.rows || []).map(x => x.close);
+  if (cl.length >= 200) { const g = (cl[0] / (cl.slice(0, 200).reduce((a, b) => a + b, 0) / 200) - 1) * 100; add("s0_200", g < 0, "코스피 200일선", (g >= 0 ? "위 +" : "아래 ") + g.toFixed(1) + "%"); }
+  if (DEBT && DEBT.fund && DEBT.fund.length > 25) {
+    const fd = DEBT.fund, ym = x => x.slice(0, 6), now = ym(fd[0].date);
+    const prev = (fd.find(x => ym(x.date) < now) || {}).date;
+    const av = a => a.length ? a.reduce((s, x) => s + x.forced, 0) / a.length : 0;
+    const t = av(fd.filter(x => ym(x.date) === now)), l = prev ? av(fd.filter(x => ym(x.date) === ym(prev))) : 0;
+    if (l) add("s0_debt", t >= l * 2, "반대매매 (이번 달)", `지난달의 ${(t / l).toFixed(1)}배`);
+  }
+  if (MEMO && MEMO.events) {
+    const nowT = Date.now();
+    const big = MEMO.events.filter(e => { const t = Date.parse(e.date); return t > nowT && t - nowT < 20 * 3600e3 && /CPI|Federal Funds|FOMC Statement|Non-Farm/i.test(e.title); });
+    add("s0_event", big.length > 0, "오늘 밤 큰 발표", big.length ? [...new Set(big.map(e => evKo(e.title).name))].join(", ") : "없음");
+  }
+  const bad = c.filter(x => x.bad).length;
+  const kospiStop = k != null && k <= r.marketStop;
+  const level = kospiStop || bad >= 3 ? "stop" : bad >= 1 ? "warn" : "ok";
+  return { checks: c, bad, level };
+}
+function recordCandidates(cands, s0){
   const ph = cbPhase().k;
   if (ph !== "final" && ph !== "auction" && ph !== "after") return;
   const rec = ls.get("mm_record", {});
   const day = ymdKey();
   if (rec[day] && (rec[day].locked || ph === "after")) return;   // 15:10~15:30 기록이 있으면 그대로 둠
   // 장 마감 후(15:30~)에 처음 열었으면: 그때 가격 = 종가로 기록 (알바 등으로 장중에 못 열어도 기록되게)
-  rec[day] = { locked: ph !== "final", late: ph === "after", items: cands.filter(c => c.signal === "green" || c.signal === "yellow")
+  rec[day] = { locked: ph !== "final", late: ph === "after", s0: s0 ? s0.level : null, items: cands.filter(c => c.signal === "green" || c.signal === "yellow")
     .map(c => ({ code: c.code, name: c.name, signal: c.signal, price: c.price, change: c.change })) };
   ls.set("mm_record", rec);
 }
@@ -1059,16 +1094,19 @@ async function loadClosing(){
   if (j.rule) { cbRule = { ...cbRule, ...j.rule }; renderLegend(); }
   const r = cbRule;
   const c = j.candidates || [];
-  saveTrail(c); recordCandidates(c); renderCbTime();
+  // 아침 계기판 자료가 아직 없으면 먼저 받아 두기 (각자 규칙대로 — 때가 안 됐으면 저장된 값 사용)
+  if (!MK) await loadMarket(); if (!DEBT) await loadDebt(); if (!MEMO) await loadMemo();
+  const s0 = stage0(j);
+  saveTrail(c); recordCandidates(c, s0); renderCbTime();
   let html = "";
-  // 0단계
-  const stop = j.marketStop;
-  html += `<section><div class="card banner ${stop ? "stop" : "ok"}">
-    <span class="stg">${tipHTML("c_0")}0단계 · 시장</span>
-    ${stop ? "🛑 <b>오늘은 쉬는 날 권장</b><br>" : "✅ "}
-    코스피 <span class="${(j.market||{}).change >= 0 ? "up" : "down"}">${pct((j.market||{}).change)}</span>
-    ${j.kosdaq ? ` · 코스닥 <span class="${j.kosdaq.change >= 0 ? "up" : "down"}">${pct(j.kosdaq.change)}</span>` : ""}
-    ${stop ? "<br><small>지수가 크게 빠진 날은 종가베팅에 불리합니다. 아래 후보는 참고만 하세요.</small>" : ""}
+  // 0단계 · 시장 위험 점검
+  const lvT = { stop: ["🛑", "오늘은 종가베팅 <b>쉬어가기</b> 권장"], warn: ["⚠️", "하더라도 <b>평소의 절반</b>만, 손절은 꼭"], ok: ["✅", "<b>평소대로</b> — 큰 위험 신호 없음"] }[s0.level];
+  html += `<section><div class="card banner ${s0.level === "stop" ? "stop" : s0.level === "warn" ? "warn" : "ok"}">
+    <span class="stg">${tipHTML("c_0")}0단계 · 시장 위험 점검</span>
+    <div class="s0head">${lvT[0]} ${lvT[1]} <small>(위험 신호 ${s0.bad}개)</small></div>
+    <ul class="s0">${s0.checks.map(x => `<li class="${x.bad ? "bad" : ""}">${tipHTML(x.key)}${x.bad ? "⚠️" : "·"} ${x.label} <b>${x.val}</b></li>`).join("")}</ul>
+    ${j.kosdaq ? `<small>코스닥 <span class="${j.kosdaq.change >= 0 ? "up" : "down"}">${pct(j.kosdaq.change)}</span></small>` : ""}
+    ${s0.level === "stop" ? "<br><small>아래 후보는 공부용으로만 보세요.</small>" : ""}
   </div></section>`;
   // 1단계 요약
   html += `<h2>${tipHTML("c_1")}1단계 통과 ${j.stage1Count}개 <small class="h2sub">(${j.source === "rank" ? "거래대금 상위 + 우량주" : "우량주 목록"} ${j.scanned}개 중 · ${r.dropMin}~${r.dropMax}% · 거래대금 ${won(r.minAmount)}↑)</small></h2>`;
@@ -1117,6 +1155,10 @@ const UPDATE_LOG = [
     ["💳 빚투 현황", "반대매매·미수금·신용융자가 급증한다는 기사를 보고. 빚으로 산 물량이 강제로 팔리면 하락이 더 커지니 '숨은 위험'으로 확인."],
     ["🌡 한국 시장 체온 (맨 아래)", "7거래일 등락·고점 대비 낙폭·200일선 이탈을 한눈에. 기사·골드만삭스가 쓰는 기준을 숫자와 그래프로."],
   ]},
+  { date:"2026.10.19", tab:"watch", items:[
+    ["🌪 시장 급변 알림", "정치·전쟁 같은 '엉뚱한 폭탄'은 예측이 안 돼서, 시장 전체가 흔들리는 순간을 빨리 알아차리려고. 코스피 −2%(−3%면 계속 울림)·VKOSPI 하루 +20%면 내 종목과 상관없이 알림."],
+    ["등락 알림 소리", "하루 등락 알림이 소리 없는 칸으로 가던 것을 '높음' 칸으로 옮김."],
+  ]},
   { date:"2026.10.16", tab:"watch", items:[
     ["📱 앱을 닫아도 오는 휴대폰 알림", "PC 알림은 앱을 열어 둬야만 와서. 서버가 장중 10분마다 대신 확인 → ntfy 앱으로 알림. 무료 서비스 3개(ntfy·Upstash·cron-job.org) 연결."],
   ]},
@@ -1129,6 +1171,10 @@ const UPDATE_LOG = [
     ["📒 매매 일지", "전문가들이 가장 공들이는 게 복기. '왜 샀나 → 결과'가 쌓이면 내 실력이 보여요."],
     ["애프터마켓 가격 (15:40~20:05)", "장 마감 후 넥스트레이드(NXT) 가격으로 다음 날 분위기 미리 보기."],
     ["자료", "모두 KIS API 원재료(일봉 약 100일·코스피 지수·현재가) + 앱이 직접 계산. 일봉은 하루 한 번만 받아 조회 제한 부담 없음."],
+  ]},
+  { date:"2026.10.19", tab:"closing", items:[
+    ["0단계를 '시장 위험 점검'으로", "코스피 하나만 보던 것을 VKOSPI·200일선·반대매매·오늘 밤 큰 발표까지 함께. 종가베팅은 밤을 넘기는 매매라 밤사이 위험을 먼저 봐야 해서. 위험 신호 개수로 ✅ 평소대로 / ⚠️ 절반만 / 🛑 쉬어가기."],
+    ["성적표에 그날 판정 기록", "나중에 ✅인 날과 ⚠️·🛑인 날의 적중률을 비교해 0단계가 정말 도움이 되는지 확인하려고."],
   ]},
   { date:"2026.10.14", tab:"closing", items:[
     ["우량주 42개를 30개씩 묶어 조회", "한 종목씩 42번 조회하다 시간 부족으로 23개를 못 봤던 문제 해결 (2번이면 끝)."],
@@ -1149,7 +1195,7 @@ const HELP = {
   closing: r => `<h3>🌇 종가베팅 후보를 고르는 방법 (0~4단계)</h3>
     <table>
       <tr><th>단계</th><th>기준</th></tr>
-      <tr><td><b>0 · 시장</b></td><td>코스피 ${r.marketStop}% 이하면 🛑 쉬는 날 권장</td></tr>
+      <tr><td><b>0 · 시장</b></td><td>코스피 ${r.marketStop}% 이하면 🛑 쉬는 날<br>+ 위험 신호(VKOSPI 30↑ · 200일선 아래 · 반대매매 2배 · 오늘 밤 큰 발표) 3개↑ 🛑 / 1~2개 ⚠️ 절반만 / 0개 ✅</td></tr>
       <tr><td><b>1 · 낙폭과대</b></td><td>거래대금 상위 종목(코스피·코스닥 각 30) + 우량주 42개 중<br>오늘 <b>${r.dropMin}% ~ ${r.dropMax}%</b> 하락, 거래대금 <b>${won(r.minAmount)} 원 이상</b><br><small>${r.dropMax}%보다 깊으면 '과대 급락'으로 따로 표시</small></td></tr>
       <tr><td><b>2 · 회복력</b></td><td><b>회복률</b>: 어제 종가에서 저점까지 빠진 폭 중 얼마나 되찾았나 (${P100(r.recGood)}%↑ 좋음, ${P100(r.recWeak)}%↓ 저점 근처)<br><b>위치</b>: 오늘 고가~저가 중 지금 어디쯤인가 (위쪽 절반 좋음)</td></tr>
       <tr><td><b>3 · 수급</b></td><td>점수로 반영 (탈락 아님)<br>외국인 순매수 +1 / 순매도 −1<br>시장보다 ${Math.abs(r.relGood)}%p 이내 +1 / ${Math.abs(r.relBad)}%p 이상 더 빠짐 −1</td></tr>
@@ -1681,7 +1727,7 @@ function renderPhone(){
       ${step(cronOn, `${tipHTML("ph3")}③ cron-job.org에서 10분마다 확인 예약${cronOn ? "" : p.cron ? " <small>(비밀 글자 OK · 예약 기다리는 중)</small>" : ""}`)}
     </ul>
     <p>${ready ? `✅ 켜짐 · 서버에 ${p.count ?? 0}종목 저장됨${synced ? ` (${new Date(synced).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} 보냄)` : ""}<br><small>마지막 장중 확인: ${p.lastRun ? esc(p.lastRun) : "아직 없음"}${p.ping ? ` · 장 밖 호출 ${esc(p.ping)}` : ""}</small>`
-      : `설정이 끝나면 장중(09:00~15:30) 10분마다 서버가 대신 확인해서 <b>손절선 · 손절 절반 · 목표 · 하루 등락 기준</b>에 닿으면 휴대폰으로 알려 줘요.`}</p>
+      : `설정이 끝나면 장중(09:00~15:30) 10분마다 서버가 대신 확인해서 <b>손절선 · 손절 절반 · 목표 · 하루 등락 기준</b>에 닿으면, 그리고 <b>🌪 시장 전체가 급변</b>하면 휴대폰으로 알려 줘요.`}</p>
     ${p.storeError ? `<p class="errinfo">${esc(p.storeError)}</p>` : ""}`}`;
   const b = document.getElementById("phTest");
   if (b) b.onclick = async () => { b.textContent = "보내는 중…"; try { const j = await api("push=test"); b.textContent = j.status === "ok" ? "보냈어요 ✓" : "실패"; } catch(e) { b.textContent = "실패"; } };
@@ -1760,7 +1806,12 @@ const TIPS = {
   u_mk:["🕒 체온·VKOSPI 받는 때","장중(09:00~15:30): 10분마다 자동<br>장 마감 후 15:40: 종가 확정값으로 한 번<br>밤·주말: 마지막 값 그대로 (바뀔 게 없어서)","↻ 버튼을 눌러도 이 규칙대로 — 때가 안 됐으면 저장해 둔 값을 보여 줘요."],
   u_debt:["🕒 빚투 받는 때","금융투자협회가 하루 한 번 발표 → 하루 두 번(09시 이후 · 17시 이후)만 확인해요.","그래서 낮에 몇 번을 열어도 서버에 다시 묻지 않아요."],
   /* 저녁 계기판 */
-  c_0:["0단계 · 시장 필터","코스피가 크게 빠진 날(기준 이하)은 '쉬는 날'로 표시.","근거: 시장 전체가 무너진 날은 좋은 종목도 다음 날 같이 약한 경우가 많아서. 출처: KIS 코스피·코스닥 지수."],
+  c_0:["0단계 · 시장 위험 점검","오늘 종가베팅을 해도 되는 날인지 먼저 점검해요.<br>· 코스피 −1.5% 이하 → 바로 🛑<br>· 위험 신호 3개 이상 → 🛑 쉬어가기<br>· 1~2개 → ⚠️ 평소의 절반만<br>· 0개 → ✅ 평소대로<br>위험 신호 = VKOSPI 30↑ · 200일선 아래 · 반대매매 2배 · 오늘 밤 큰 발표","아침 계기판 자료를 그대로 써요 (따로 조회 안 함). 그날 판정은 성적표 기록에도 함께 남겨서, 나중에 '⚠️인 날 후보는 얼마나 맞았나'를 비교할 수 있어요."],
+  s0_kospi:["코스피 오늘","오늘 코스피 등락. 기준(−1.5%) 이하면 이것만으로 🛑 쉬어가기.","근거: 시장 전체가 무너진 날은 좋은 종목도 다음 날 같이 약한 경우가 많아요."],
+  s0_vk:["VKOSPI (공포지수)","30 이상이면 위험 신호 1개.","근거: 공포 구간에서는 밤사이·다음 날 출렁임이 커서, 종가에 산 것이 아침에 크게 빠질 위험 ↑. 아침 계기판과 같은 값."],
+  s0_200:["코스피 200일선","코스피가 200일선(약 10개월 평균) 아래면 위험 신호 1개.","근거: 장기 추세가 꺾인 구간에서는 반등이 짧고 약한 경우가 많아요."],
+  s0_debt:["반대매매","이번 달 반대매매 하루 평균이 지난달의 2배 이상이면 위험 신호 1개.","근거: 빚투 물량이 강제로 팔리는 시기엔 하락이 더 깊어질 수 있어요. 1~2일 늦게 발표되는 자료예요."],
+  s0_event:["오늘 밤 큰 발표","앞으로 20시간 안에 CPI · 미국 기준금리(FOMC) · 고용(NFP) 발표가 있으면 위험 신호 1개.","근거: 종가베팅은 밤을 넘기는 매매라, 큰 발표 결과에 따라 다음 날 아침이 크게 출렁일 수 있어요."],
   c_1:["1단계 · 낙폭과대 후보","오늘 적당히(기준 범위) 빠졌고 거래대금이 충분한 종목만 통과.","근거: 너무 조금 빠지면 기회가 아니고, 너무 많이 빠지면 진짜 악재일 수 있어서. 기준 숫자와 바꾼 이유는 📖 기준 보기 맨 아래에."],
   c_rank:["순위 조회 상태","KIS '거래대금 순위'에서 코스피·코스닥 각 30개를 받았는지 + 우량주 42개를 한 번에(30개씩 2번) 조회.","'실패'나 '0개'가 보이면 캡처해서 보내 주세요. 숫자가 나오면 정상."],
   c_amt:["거래대금","오늘 이 종목이 거래된 금액 합계.","많을수록 사고팔기 쉽고, 몇몇 사람이 가격을 흔들기 어려워요."],
@@ -1796,7 +1847,7 @@ const TIPS = {
   d_inv:["투자자별 순매수","외국인·기관이 최근 며칠 산 수량 − 판 수량. +면 사는 중.","며칠 연속 같은 방향이면 큰손의 뜻이 담긴 흐름일 가능성이 높아요."],
   journal:["📒 매매 일지","팔 때마다 매수가·판 가격·수익률·산 이유·소감이 쌓여요. 위쪽 숫자는 '몇 번 중 몇 번 수익'과 평균 수익률.","10번 이상 쌓이면 '어떤 이유로 산 게 잘 맞았나'를 돌아보세요. 이 브라우저에만 저장돼요."],
   notify:["PC 알림","앱을 열어 두면 5분마다 확인해 신호가 생기면 화면 구석에 알림을 띄워요. 같은 종목·같은 신호는 하루 한 번.","앱(탭)을 닫으면 알림이 오지 않아요."],
-  ph:["📱 휴대폰 알림 (앱을 닫아도)","앱을 닫아도 서버가 장중 10분마다 내 관심·보유 종목을 확인해서, 손절선·손절 절반·목표·하루 등락 기준에 닿으면 휴대폰으로 알려 줘요. 같은 종목·같은 신호는 하루 한 번.","무료 서비스 3개를 이어 붙인 구조예요: ntfy(알림 앱) + Upstash(목록 보관함) + cron-job.org(10분 알람시계). 목록은 종목을 바꿀 때마다 앱이 자동으로 서버에 보내요."],
+  ph:["📱💻 휴대폰 · PC 알림 (앱을 닫아도)","앱을 닫아도 서버가 장중 10분마다 확인해서 알려 줘요.<br>· 내 종목: 손절선 🚨 · 손절 절반 ⚠️ · 목표 🎯 · 하루 등락 🔔<br>· 🌪 시장 급변: 코스피 −2% (−3%면 계속 울림) · VKOSPI 하루 +20%<br>같은 신호는 하루 한 번.","무료 서비스 3개를 이어 붙인 구조예요: ntfy(알림 앱) + Upstash(목록 보관함) + cron-job.org(10분 알람시계). 목록은 종목을 바꿀 때마다 앱이 자동으로 서버에 보내요."],
   ph1:["① ntfy (휴대폰 · PC)","무료 알림 앱 (가입 없음). 휴대폰: 플레이스토어에서 'ntfy' 설치 → + 눌러 주제 이름 입력 → 구독.<br>PC: 크롬에서 ntfy.sh/app → 권한 부여하기 → 주제 구독하기. 같은 주제를 구독한 곳이면 모두 알림이 와요.","주제 이름은 비밀번호처럼 남이 모르게 길게 (예: ampm-seyoung-7k2q). 같은 이름을 Vercel 환경변수 NTFY_TOPIC 에도 넣어요."],
   ph2:["② 무료 저장소 (Upstash Redis)","서버가 내 종목 목록을 기억해 두는 곳. Vercel 프로젝트 → Storage → Create Database → Upstash (Redis) → 무료 플랜 → 프로젝트 연결.","연결하면 필요한 키(KV_REST_API_URL / TOKEN)가 자동으로 들어가요. 그다음 Redeploy 한 번."],
   ph3:["③ 10분 알람시계 (cron-job.org)","무료 예약 서비스가 10분마다 내 서버 주소를 눌러 깨워 줘요. 주소: https://am-pm-stock.vercel.app/api/closing?alert=(내가 정한 비밀 글자)","Vercel 환경변수 ALERT_TOKEN 에 같은 비밀 글자를 넣어요. 장 시간이 아니면 서버가 알아서 그냥 넘어가요."],
