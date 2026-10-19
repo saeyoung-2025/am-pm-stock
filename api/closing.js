@@ -164,6 +164,45 @@ async function ntfy(title, message, opt = {}) {
   const r = await fetch("https://ntfy.sh/", { method: "POST", headers: { "content-type": "application/json" },
     body: JSON.stringify({ topic, title, message, priority: opt.priority || 4, tags: opt.tags || [], click: opt.click || "https://am-pm-stock.vercel.app/" }) });
   if (!r.ok) throw new Error("ntfy " + r.status);
+  if (opt.kind) { try { const wk = weekKey(); await redis("HINCRBY", `amp:cnt:${wk}`, opt.kind, 1); await redis("EXPIRE", `amp:cnt:${wk}`, 1209600); } catch (e) {} }
+}
+// 이번 주 월요일(한국 시간) YYYYMMDD
+function weekKey(ms) {
+  const d = new Date((ms || Date.now()) + 9 * 3600e3);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10).replace(/-/g, "");
+}
+// 📬 주간 리포트 만들기 (앱이 보내 둔 성적표·일지 요약 + 이번 주 알림 횟수 + 다음 주 큰 발표)
+async function weeklyReport() {
+  const wk = weekKey();
+  const cnt = (await redis("HGETALL", `amp:cnt:${wk}`)) || [];
+  const c = {}; for (let i = 0; i < cnt.length; i += 2) c[cnt[i]] = +cnt[i + 1];
+  const total = Object.values(c).reduce((a, b) => a + b, 0);
+  let st = null; try { st = JSON.parse((await redis("GET", "amp:stats")) || "null"); } catch (e) {}
+  const L = [];
+  const label = { stop: "🚨손절", warn: "⚠️손절절반", take: "🎯목표", th: "🔔등락", market: "🌪시장", dart: "📋공시" };
+  L.push(`🔔 알림 ${total}번${total ? " (" + Object.entries(c).map(([k, v]) => `${label[k] || k} ${v}`).join(" · ") + ")" : ""}`);
+  if (st && st.record) {
+    const r = st.record;
+    L.push(`📊 종가베팅 성적표 (이번 주): 🟢 ${r.g.n ? `${r.g.hit}/${r.g.n}` : "없음"} · 🟡 ${r.y.n ? `${r.y.hit}/${r.y.n}` : "없음"}${r.s0 ? ` · 판정 ✅${r.s0.ok || 0} ⚠️${r.s0.warn || 0} 🛑${r.s0.stop || 0}일` : ""}`);
+    if (r.allG && r.allG.n >= 5) L.push(`   누적 🟢 적중률 ${Math.round(r.allG.hit / r.allG.n * 100)}% (${r.allG.n}건) · 🟡 ${r.allY && r.allY.n ? Math.round(r.allY.hit / r.allY.n * 100) + "%" : "–"}`);
+  }
+  if (st && st.journal) {
+    const j = st.journal;
+    L.push(`📒 이번 주 매도 ${j.weekN}건${j.weekN ? ` · 평균 ${j.weekAvg >= 0 ? "+" : ""}${j.weekAvg}%` : ""} ${j.weekWon != null ? ` · 💰 ${j.weekWon >= 0 ? "+" : "−"}${Math.abs(j.weekWon).toLocaleString("ko-KR")}원` : ""}${j.weekPaperWon != null ? ` · 🧪 ${j.weekPaperWon >= 0 ? "+" : "−"}${Math.abs(j.weekPaperWon).toLocaleString("ko-KR")}원` : ""} · 지금 보유 ${j.holding}종목${j.paperHolding ? ` (🧪 ${j.paperHolding})` : ""}`);
+    if (j.mood) L.push(`   기분별 누적: ${j.mood}`);
+  }
+  try {
+    const r = await fetch("https://nfs.faireconomy.media/ff_calendar_nextweek.json");
+    if (r.ok) {
+      const big = (await r.json()).filter(e => e.country === "USD" && e.impact === "High" && /CPI|Federal Funds|Non-Farm|PCE|GDP|Retail Sales|ISM Manufacturing/i.test(e.title));
+      if (big.length) L.push(`📅 다음 주 큰 발표: ${[...new Set(big.map(e => { const d = new Date(Date.parse(e.date) + 9 * 3600e3); return `${d.getUTCMonth() + 1}/${d.getUTCDate()} ${e.title.replace(/ m\/m| y\/y| q\/q/g, "")}`; }))].slice(0, 5).join(", ")}`);
+    }
+  } catch (e) {}
+  L.push("한 주 수고 많으셨어요. 주말엔 푹 쉬세요 🌙");
+  const d0 = new Date(Date.parse(wk.slice(0, 4) + "-" + wk.slice(4, 6) + "-" + wk.slice(6)) + 4 * 86400e3);
+  await ntfy(`📬 이번 주 정리 (${+wk.slice(4, 6)}/${+wk.slice(6)}~${d0.getUTCMonth() + 1}/${d0.getUTCDate()})`, L.join("\n"), { priority: 3, tags: ["mailbox_with_mail"] });
+  return L;
 }
 // ── 📋 DART 공시 (금융감독원 오픈API, 무료 키: DART_API_KEY) ──
 const DART_KEY = () => (process.env.DART_API_KEY || "").trim();
@@ -242,11 +281,15 @@ module.exports = async (req, res) => {
               if ((await redis("SET", `amp:dart:${d.rcept}`, "1", "NX", "EX", 604800)) !== "OK") continue;
               const icon = { red: "🔴", yellow: "🟡", green: "🟢", blue: "📊" }[d.cls.lv];
               await ntfy(`${icon} ${w.name} · ${d.cls.tag} 공시`, `${d.title}\n제출: ${d.by || ""}${d.cls.lv === "red" ? "\n악재일 수 있어요. 내용을 확인하세요." : ""}`,
-                { priority: d.cls.lv === "red" || d.cls.lv === "yellow" ? 4 : 3, tags: ["page_facing_up"], click: DART_LINK(d.rcept) });
+                { priority: d.cls.lv === "red" || d.cls.lv === "yellow" ? 4 : 3, tags: ["page_facing_up"], kind: "dart", click: DART_LINK(d.rcept) });
               dartSent.push(`${w.name}:${d.cls.tag}`);
             }
           }
         } catch (e) {}
+      }
+      // 📬 금요일 18:00~18:09 주간 리포트 (한 번만)
+      if (k0.wd === 5 && k0.min >= 1080 && k0.min < 1090) {
+        try { if ((await redis("SET", `amp:weekly:${k0.ymd}`, "1", "NX", "EX", 172800)) === "OK") await weeklyReport(); } catch (e) {}
       }
       if (k0.wd === 0 || k0.wd === 6 || k0.min < 540 || k0.min > 935) {
         try { await redis("SET", "amp:ping", `${k0.ymd.slice(4,6)}/${k0.ymd.slice(6)} ${String(Math.floor(k0.min / 60)).padStart(2,"0")}:${String(k0.min % 60).padStart(2,"0")}`); } catch (e) {}
@@ -291,10 +334,13 @@ module.exports = async (req, res) => {
     if (qv("push") === "sync") {
       const list = (Array.isArray(req.body && req.body.watch) ? req.body.watch : []).filter(w => CODE_RE.test(w.code)).slice(0, 30)
         .map(w => ({ code: w.code, name: String(w.name || w.code).slice(0, 20), on: w.on !== false, th: +w.th || 5, dir: w.dir || "both",
-          buy: +w.buy || null, stop: +w.stop || -7, take: +w.take || 10 }));
+          buy: +w.buy || null, stop: +w.stop || -7, take: +w.take || 10, paper: !!w.paper }));
+      if (req.body && req.body.stats) { try { await redis("SET", "amp:stats", JSON.stringify(req.body.stats).slice(0, 4000)); } catch (e) {} }
       await redis("SET", "amp:watch", JSON.stringify(list));
       return res.status(200).json({ status: "ok", saved: list.length });
     }
+    // ⭐ 📬 주간 리포트 미리 보기: /api/closing?push=weekly
+    if (qv("push") === "weekly") { const L = await weeklyReport(); return res.status(200).json({ status: "ok", lines: L }); }
     // ⭐ 📱 테스트 알림: /api/closing?push=test
     if (qv("push") === "test") {
       await ntfy("am-pm 테스트 알림 ✅", "휴대폰 알림이 잘 연결됐어요. 장중(09:00~15:30)에 손절·목표·등락 기준에 닿으면 이렇게 알려 드려요.", { tags: ["white_check_mark"] });
@@ -316,7 +362,7 @@ module.exports = async (req, res) => {
         if (vk && vk.change != null && vk.change >= 20) mk.push(["vk20", `🌪 공포지수 VKOSPI +${vk.change.toFixed(1)}%`, `VKOSPI ${vk.value.toFixed(1)} (하루 +${vk.change.toFixed(1)}%). 투자자들이 큰 출렁임을 예상하기 시작했어요.\n뉴스를 확인하고 무리한 매수는 피하세요.`, 4]);
         for (const [kind, title, msg, pr] of mk) {
           if ((await redis("SET", `amp:sent:${k.ymd}:MARKET:${kind}`, "1", "NX", "EX", 90000)) !== "OK") continue;
-          await ntfy(title, msg, { priority: pr, tags: ["tornado"], click: "https://am-pm-stock.vercel.app/" });
+          await ntfy(title, msg, { priority: pr, tags: ["tornado"], kind: "market", click: "https://am-pm-stock.vercel.app/" });
           sentMk.push(kind);
         }
       } catch (e) {}
@@ -345,7 +391,7 @@ module.exports = async (req, res) => {
         for (const [kind, title, msg, pr] of hits) {
           const ok = await redis("SET", `amp:sent:${k.ymd}:${w.code}:${kind}`, "1", "NX", "EX", 90000);   // 같은 종목·같은 신호는 하루 한 번
           if (ok !== "OK") continue;
-          await ntfy(`${w.name} · ${title}`, msg, { priority: pr, click: `https://m.stock.naver.com/domestic/stock/${w.code}/total` });
+          await ntfy(`${w.paper && kind !== "th" ? "🧪 연습 · " : ""}${w.name} · ${title}`, msg, { priority: w.paper && kind !== "th" ? Math.min(pr, 4) : pr, kind, click: `https://m.stock.naver.com/domestic/stock/${w.code}/total` });
           sent.push(`${w.name}:${kind}`);
         }
       }
