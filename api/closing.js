@@ -105,7 +105,7 @@ async function multiQuote(codes, mkt, auth) {
 const zlib = require("zlib");
 let vkCode = null;
 async function findVkospiCode() {
-  if (vkCode) return vkCode;
+  if (vkCode) return [vkCode];
   const r = await fetch("https://new.real.download.dws.co.kr/common/master/idxcode.mst.zip");
   const buf = Buffer.from(await r.arrayBuffer());
   if (buf.readUInt32LE(0) !== 0x04034b50) throw new Error("지수 목록 파일 형식 다름");
@@ -115,20 +115,28 @@ async function findVkospiCode() {
   const raw = method === 8 ? zlib.inflateRawSync(body) : body;
   let text;
   try { text = new TextDecoder("euc-kr").decode(raw); } catch (e) { text = raw.toString("latin1"); }
-  const line = text.split(/\r?\n/).find(l => /변동성/.test(l) && /200/.test(l)) || text.split(/\r?\n/).find(l => /변동성/.test(l));
-  if (!line) throw new Error("목록에 변동성지수 없음");
-  const m = line.match(/(\d{4,5})/);           // 줄 앞쪽 숫자: [구분 1자리] + 코드 4자리
-  if (!m) throw new Error("코드 해석 실패");
-  vkCode = m[1].slice(-4);
-  return vkCode;
+  // '변동성'이 들어간 줄을 모두 후보로 — 저변동·고변동·변동성조절·타겟 같은 다른 지수는 빼고, 'VKOSPI'·'변동성지수' 이름을 앞으로
+  const lines = text.split(/\r?\n/).filter(l => /변동성|VKOSPI|V-KOSPI/i.test(l) && !/저변동|고변동|조절|타겟|컨트롤|로우|하이|레버리지|인버스/.test(l));
+  lines.sort((x, y) => (/VKOSPI|V-KOSPI|변동성지수/i.test(y) ? 1 : 0) - (/VKOSPI|V-KOSPI|변동성지수/i.test(x) ? 1 : 0));
+  const codes = [...new Set(lines.map(l => (l.match(/(\d{4,5})/) || [])[1]).filter(Boolean).map(c => c.slice(-4)))];
+  if (!codes.length) throw new Error("목록에 변동성지수 없음");
+  return codes;
 }
 async function getVkospi(auth) {
-  const code = await findVkospiCode();
-  const m = await kis("/uapi/domestic-stock/v1/quotations/inquire-index-price", "FHPUP02100000",
-    { FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: code }, auth);
-  const value = num(m.output.bstp_nmix_prpr);
-  if (!value || value < 3 || value > 200) throw new Error("값 확인 필요 (" + code + ")");
-  return { code, value, change: num(m.output.bstp_nmix_prdy_ctrt) };
+  const codes = await findVkospiCode();
+  const tried = [];
+  for (const code of codes.slice(0, 6)) {
+    try {
+      const m = await kis("/uapi/domestic-stock/v1/quotations/inquire-index-price", "FHPUP02100000",
+        { FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: code }, auth);
+      const value = num(m.output.bstp_nmix_prpr);
+      if (value && value >= 5 && value <= 150) { vkCode = code; return { code, value, change: num(m.output.bstp_nmix_prdy_ctrt) }; }
+      tried.push(`${code}:${value}`);
+    } catch (e) { tried.push(code + ":오류"); }
+    await sleep(120);
+  }
+  vkCode = null;
+  throw new Error("값 확인 필요 (" + tried.join(", ") + ")");
 }
 
 // ── 📱 휴대폰 알림: 저장소(Upstash Redis, Vercel Storage에서 무료 생성) + ntfy(무료 알림 앱) ──
