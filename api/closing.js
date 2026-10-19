@@ -222,8 +222,24 @@ module.exports = async (req, res) => {
     if (isCron) {
       const k = kstNow();
       if (k.wd === 0 || k.wd === 6 || k.min < 540 || k.min > 935) return res.status(200).json({ status: "ok", skipped: "장 시간 아님" });
+      // 🌪 시장 급변 알림 — 내 종목과 상관없이 시장 전체가 흔들릴 때 (각 신호 하루 한 번)
+      const sentMk = [];
+      try {
+        const m = (await kis("/uapi/domestic-stock/v1/quotations/inquire-index-price", "FHPUP02100000", { FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: "0001" }, auth)).output;
+        const kc = num(m.bstp_nmix_prdy_ctrt), kv = num(m.bstp_nmix_prpr);
+        let vk = null; try { vk = await getVkospi(auth); } catch (e) {}
+        const mk = [];
+        if (kc != null && kc <= -3) mk.push(["kospi3", `🌪 코스피 ${kc.toFixed(2)}% 급락`, `코스피 ${kv ? kv.toLocaleString() : ""} (${kc.toFixed(2)}%). 시장 전체가 크게 흔들리는 중이에요.\n보유 종목 손절선을 점검하고, 오늘 종가베팅은 쉬어가세요.`, 5]);
+        else if (kc != null && kc <= -2) mk.push(["kospi2", `🌪 코스피 ${kc.toFixed(2)}%`, `코스피 ${kv ? kv.toLocaleString() : ""} (${kc.toFixed(2)}%). 시장 전체가 약해요.\n보유 종목을 한 번 점검해 두세요.`, 4]);
+        if (vk && vk.change != null && vk.change >= 20) mk.push(["vk20", `🌪 공포지수 VKOSPI +${vk.change.toFixed(1)}%`, `VKOSPI ${vk.value.toFixed(1)} (하루 +${vk.change.toFixed(1)}%). 투자자들이 큰 출렁임을 예상하기 시작했어요.\n뉴스를 확인하고 무리한 매수는 피하세요.`, 4]);
+        for (const [kind, title, msg, pr] of mk) {
+          if ((await redis("SET", `amp:sent:${k.ymd}:MARKET:${kind}`, "1", "NX", "EX", 90000)) !== "OK") continue;
+          await ntfy(title, msg, { priority: pr, tags: ["tornado"], click: "https://am-pm-stock.vercel.app/" });
+          sentMk.push(kind);
+        }
+      } catch (e) {}
       const list = JSON.parse((await redis("GET", "amp:watch")) || "[]").filter(w => w.on);
-      if (!list.length) return res.status(200).json({ status: "ok", skipped: "목록 없음" });
+      if (!list.length) return res.status(200).json({ status: "ok", skipped: "목록 없음", market: sentMk });
       const q = await multiQuote(list.map(w => w.code), "J", auth);
       // 한꺼번에 조회에서 빠진 종목(일부 ETF·ETN)은 하나씩 현재가로
       for (const w of list.filter(w => !q[w.code])) {
@@ -251,8 +267,8 @@ module.exports = async (req, res) => {
           sent.push(`${w.name}:${kind}`);
         }
       }
-      await redis("SET", "amp:lastrun", `${k.ymd.slice(4,6)}/${k.ymd.slice(6)} ${String(Math.floor(k.min / 60)).padStart(2,"0")}:${String(k.min % 60).padStart(2,"0")} · ${list.length}종목 확인 · 알림 ${sent.length}건`);
-      return res.status(200).json({ status: "ok", checked: list.length, sent });
+      await redis("SET", "amp:lastrun", `${k.ymd.slice(4,6)}/${k.ymd.slice(6)} ${String(Math.floor(k.min / 60)).padStart(2,"0")}:${String(k.min % 60).padStart(2,"0")} · ${list.length}종목 확인 · 알림 ${sent.length + sentMk.length}건`);
+      return res.status(200).json({ status: "ok", checked: list.length, sent: [...sentMk, ...sent] });
     }
 
     // ⭐ 자동 아침 메모 재료: /api/closing?memo=1
