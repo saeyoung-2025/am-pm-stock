@@ -238,6 +238,13 @@
   #tipBox .how{display:block;margin-top:5px;color:#777;font-size:11.5px}
   .phsteps{list-style:none;margin:6px 0 8px;padding:0;font-size:12.5px;line-height:1.9} .phsteps li.ok{color:var(--faint)}
   .phsteps code{background:#f3f4f8;padding:1px 6px;border-radius:5px;font-size:11.5px}
+  #phoneCard .pill-btn{white-space:nowrap;flex:none}
+  .dlist{list-style:none;margin:2px 0 8px;padding:0;font-size:12px}
+  .dlist li{display:flex;gap:6px;align-items:baseline;padding:3px 0;border-bottom:1px dashed var(--line)}
+  .dlist li a{flex:1;color:var(--ink,#222);text-decoration:none} .dlist li a:hover{text-decoration:underline}
+  .dlist small{color:var(--faint);white-space:nowrap}
+  .dartbad{margin:4px 0 2px 22px;font-size:12px;color:#b45309;background:#fff6e5;border-radius:8px;padding:5px 8px}
+  .dartbad a{color:#b45309;font-weight:700}
   .wl-group{font-size:13px;font-weight:700;color:var(--sub);margin:16px 4px 6px}
   .wl-group span{font-family:Nunito,sans-serif;color:var(--faint);margin-left:4px}
   .wl-item .ov{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 6px;margin-top:6px;font-size:12.5px}
@@ -1125,11 +1132,25 @@ async function loadClosing(){
           <em>${esc((q.why || []).concat(q.why3 || []).join(" · "))}</em></div>
         <div class="px">${q.price != null ? q.price.toLocaleString() : "–"}
           <small class="${q.change >= 0 ? "up" : "down"}">${pct(q.change)}</small></div>
-      </div>${trailHTML(q.code)}${explain(q) ? `<p class="memo">💬 ${esc(explain(q))}</p>` : ""}</div>`).join("") + `</div></section>`;
+      </div><p class="dartbad" data-code="${esc(q.code)}" hidden></p>${trailHTML(q.code)}${explain(q) ? `<p class="memo">💬 ${esc(explain(q))}</p>` : ""}</div>`).join("") + `</div></section>`;
   }
   if ((j.tooDeep || []).length) html += `<p class="errinfo">${tipHTML("c_deep")}${r.dropMax}%보다 깊게 빠져 제외: ${j.tooDeep.map(x => `${esc(x.name)} ${pct(x.change)}`).join(", ")}</p>`;
   html += `<div id="cbReport">${reportHTML()}</div>`;
   document.getElementById("cbBody").innerHTML = html;
+  markDartBad(c.filter(q => q.signal === "green" || q.signal === "yellow").map(q => q.code));
+}
+/* 후보 중 최근 3일 안에 🔴 악재 공시가 있으면 표시 (DART 키가 있을 때만) */
+async function markDartBad(codes){
+  if (!codes.length || location.protocol === "file:" || (PUSH && PUSH.dart === false)) return;
+  const day = todayKey(), cache = store.get("mm_dartbad", {});
+  const key = day + ":" + codes.join(",");
+  let bad = cache.key === key && Date.now() - cache.at < 30 * 60 * 1000 ? cache.bad : null;
+  if (!bad) { try { const j = await api("dartbad=" + codes.join(",")); if (j.status !== "ok") return; bad = j.bad || {}; store.set("mm_dartbad", { key, at: Date.now(), bad }); } catch(e) { return; } }
+  document.querySelectorAll(".dartbad").forEach(el => {
+    const b = bad[el.dataset.code]; if (!b) return;
+    el.hidden = false;
+    el.innerHTML = `${tipHTML("c_dart")}🔴 최근 3일 악재 공시: ${b.map(x => `<a href="${esc(x.link)}" target="_blank" rel="noopener">${esc(x.tag)}</a>`).join(", ")} — 빠진 이유일 수 있어요. 종가베팅은 피하는 게 좋아요.`;
+  });
 }
 document.getElementById("cbRefresh").addEventListener("click", loadClosing);
 // 관찰 시간(14:30~15:20)에는 탭이 열려 있으면 5분마다 자동 확인
@@ -1156,6 +1177,7 @@ const UPDATE_LOG = [
     ["🌡 한국 시장 체온 (맨 아래)", "7거래일 등락·고점 대비 낙폭·200일선 이탈을 한눈에. 기사·골드만삭스가 쓰는 기준을 숫자와 그래프로."],
   ]},
   { date:"2026.10.19", tab:"watch", items:[
+    ["📋 DART 공시 알림 · 최근 공시", "대주주 매도나 유상증자 같은 소식은 뉴스보다 공시로 먼저 나와서. 관심종목의 중요한 공시 15종을 🔴🟡🟢📊로 나눠 알림, 펼친 화면에 최근 공시 목록."],
     ["🌪 시장 급변 알림", "정치·전쟁 같은 '엉뚱한 폭탄'은 예측이 안 돼서, 시장 전체가 흔들리는 순간을 빨리 알아차리려고. 코스피 −2%(−3%면 계속 울림)·VKOSPI 하루 +20%면 내 종목과 상관없이 알림."],
     ["등락 알림 소리", "하루 등락 알림이 소리 없는 칸으로 가던 것을 '높음' 칸으로 옮김."],
   ]},
@@ -1173,6 +1195,7 @@ const UPDATE_LOG = [
     ["자료", "모두 KIS API 원재료(일봉 약 100일·코스피 지수·현재가) + 앱이 직접 계산. 일봉은 하루 한 번만 받아 조회 제한 부담 없음."],
   ]},
   { date:"2026.10.19", tab:"closing", items:[
+    ["후보에 🔴 악재 공시 경고", "많이 빠진 이유가 유상증자·전환사채 같은 회사 자체의 악재면 반등이 약해서. 최근 3일 악재 공시가 있으면 후보 아래에 표시 (DART 키 필요)."],
     ["0단계를 '시장 위험 점검'으로", "코스피 하나만 보던 것을 VKOSPI·200일선·반대매매·오늘 밤 큰 발표까지 함께. 종가베팅은 밤을 넘기는 매매라 밤사이 위험을 먼저 봐야 해서. 위험 신호 개수로 ✅ 평소대로 / ⚠️ 절반만 / 🛑 쉬어가기."],
     ["성적표에 그날 판정 기록", "나중에 ✅인 날과 ⚠️·🛑인 날의 적중률을 비교해 0단계가 정말 도움이 되는지 확인하려고."],
   ]},
@@ -1527,7 +1550,7 @@ function afterTag(code){
   const v = a.vsClose;
   return `<span class="aft">애프터 ${a.price.toLocaleString()}${v == null ? "" : ` <span class="${v >= 0 ? "up" : "down"}">${pct(v)}</span>`}</span>`;
 }
-let invCache = {};
+let invCache = {}, dartCache = {};
 function detailHTML(w){
   const q = wlQuotes[w.code] || {}, st = stats(w.code), sg = signals(w);
   const f = v => v == null ? "–" : v.toLocaleString();
@@ -1557,6 +1580,13 @@ function detailHTML(w){
     : `<p class="dsub">불러오는 중…</p>`;
   if (sg.length) h += `<div class="tips">${sg.map(x => `<p>💬 <b>${x.t}</b> — ${TIP[x.k]}</p>`).join("")}</div>`;
   else h += `<div class="tips"><p>💬 지금은 특별한 신호가 없습니다. 평소 흐름대로 움직이는 중이에요.</p></div>`;
+  const dc = dartCache[w.code];
+  h += `<p class="dt">${tipHTML("d_dart")}📋 최근 공시 (30일)</p>`;
+  h += !dc ? `<p class="dsub">불러오는 중…</p>`
+     : dc.status === "no_key" ? `<p class="dsub">DART 키를 넣으면 보여요 (📱💻 알림 카드 ④)</p>`
+     : dc.note ? `<p class="dsub">${esc(dc.note)}</p>`
+     : !(dc.items || []).length ? `<p class="dsub">최근 30일 공시 없음</p>`
+     : `<ul class="dlist">${dc.items.slice(0, 6).map(d => `<li><span class="lv ${d.cls ? d.cls.lv : ""}">${d.cls ? { red:"🔴", yellow:"🟡", green:"🟢", blue:"📊" }[d.cls.lv] : "·"}</span><a href="${esc(d.link)}" target="_blank" rel="noopener">${esc(d.title)}</a><small>${d.date.slice(4,6)}/${d.date.slice(6)}</small></li>`).join("")}</ul>`;
   h += `<div class="dlinks">
     <a href="https://m.stock.naver.com/domestic/stock/${w.code}/total" target="_blank" rel="noopener">📈 종목 정보</a>
     <a href="https://m.stock.naver.com/domestic/stock/${w.code}/news" target="_blank" rel="noopener">📰 뉴스</a>
@@ -1575,6 +1605,7 @@ document.getElementById("wlBody").addEventListener("click", async e => {
     if (openCode){
       await getDaily(w.code); renderWatch();
       if (!invCache[w.code]) { try { const j = await api("investor=" + w.code); if (j.status === "ok") invCache[w.code] = j.rows; } catch(e){} renderWatch(); }
+      if (!dartCache[w.code]) { try { dartCache[w.code] = await api("dart=" + w.code); } catch(e) { dartCache[w.code] = { status:"ok", items:[] }; } renderWatch(); }
     }
     return;
   }
@@ -1725,6 +1756,7 @@ function renderPhone(){
       ${step(p.ntfy, `${tipHTML("ph1")}① 휴대폰 <b>ntfy</b> 앱 (+ PC는 ntfy.sh/app) 에서 주제 구독${p.topic ? ` <code>${esc(p.topic)}</code>` : ""}`)}
       ${step(p.store, `${tipHTML("ph2")}② Vercel에서 무료 저장소(Upstash Redis) 연결`)}
       ${step(cronOn, `${tipHTML("ph3")}③ cron-job.org에서 10분마다 확인 예약${cronOn ? "" : p.cron ? " <small>(비밀 글자 OK · 예약 기다리는 중)</small>" : ""}`)}
+      ${step(p.dart, `${tipHTML("ph4")}④ (선택) DART 키 — 📋 공시 알림`)}
     </ul>
     <p>${ready ? `✅ 켜짐 · 서버에 ${p.count ?? 0}종목 저장됨${synced ? ` (${new Date(synced).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })} 보냄)` : ""}<br><small>마지막 장중 확인: ${p.lastRun ? esc(p.lastRun) : "아직 없음"}${p.ping ? ` · 장 밖 호출 ${esc(p.ping)}` : ""}</small>`
       : `설정이 끝나면 장중(09:00~15:30) 10분마다 서버가 대신 확인해서 <b>손절선 · 손절 절반 · 목표 · 하루 등락 기준</b>에 닿으면, 그리고 <b>🌪 시장 전체가 급변</b>하면 휴대폰으로 알려 줘요.`}</p>
@@ -1851,6 +1883,9 @@ const TIPS = {
   ph1:["① ntfy (휴대폰 · PC)","무료 알림 앱 (가입 없음). 휴대폰: 플레이스토어에서 'ntfy' 설치 → + 눌러 주제 이름 입력 → 구독.<br>PC: 크롬에서 ntfy.sh/app → 권한 부여하기 → 주제 구독하기. 같은 주제를 구독한 곳이면 모두 알림이 와요.","주제 이름은 비밀번호처럼 남이 모르게 길게 (예: ampm-seyoung-7k2q). 같은 이름을 Vercel 환경변수 NTFY_TOPIC 에도 넣어요."],
   ph2:["② 무료 저장소 (Upstash Redis)","서버가 내 종목 목록을 기억해 두는 곳. Vercel 프로젝트 → Storage → Create Database → Upstash (Redis) → 무료 플랜 → 프로젝트 연결.","연결하면 필요한 키(KV_REST_API_URL / TOKEN)가 자동으로 들어가요. 그다음 Redeploy 한 번."],
   ph3:["③ 10분 알람시계 (cron-job.org)","무료 예약 서비스가 10분마다 내 서버 주소를 눌러 깨워 줘요. 주소: https://am-pm-stock.vercel.app/api/closing?alert=(내가 정한 비밀 글자)","Vercel 환경변수 ALERT_TOKEN 에 같은 비밀 글자를 넣어요. 장 시간이 아니면 서버가 알아서 그냥 넘어가요."],
+  ph4:["④ DART 키 (공시 알림)","금융감독원 DART 오픈API 무료 키. 넣으면 관심종목에 중요한 공시가 올라올 때 알림이 와요 (평일 07~20시, 30분마다 확인).<br>🔴 악재(유상증자·전환사채·감자·최대주주 변경·횡령·관리종목 등) · 🟡 대주주 지분 변동·담보 → 소리 알림<br>🟢 호재(자사주·공급계약·배당) · 📊 실적 → 조용히","발급: opendart.fss.or.kr → 인증키 신청 → 메일로 받은 40자리 키를 Vercel 환경변수 DART_API_KEY 에 넣고 Redeploy."],
+  d_dart:["📋 최근 공시","DART에 올라온 이 회사의 최근 30일 공시. 누르면 원문으로 이동.<br>🔴 악재 · 🟡 대주주 지분 · 🟢 호재 · 📊 실적 · '·' 그 밖의 공시","ETF·ETN은 DART 공시 대상이 아니라 비어 있어요. 정정 공시는 대부분 생략해요."],
+  c_dart:["악재 공시 경고","이 후보 회사에 최근 3일 안에 🔴 악재 공시(유상증자·전환사채·감자·최대주주 변경 등)가 있어요.","많이 빠진 이유가 회사 자체의 악재라면 반등이 약한 경우가 많아요. 종가베팅 1단계 '낙폭과대'의 함정이에요."],
   k_stop:["손절선 알림","매수가 대비 손절선까지 빠지면.","가장 중요한 알림 — 꺼 두지 않기를 권해요."],
   k_warn:["손절 절반 알림","손절선의 절반만큼 빠지면 미리 경고. 예: 손절 −6%면 −3%에서.","이때 뉴스·공시를 확인해 두면 손절선에서 덜 당황해요."],
   k_take:["목표 도달 알림","매수가 대비 목표 수익에 닿으면.","전부 팔거나, 절반만 팔아 수익을 지키는 방법이 있어요."],
