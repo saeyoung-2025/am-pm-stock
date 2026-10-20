@@ -469,6 +469,37 @@ module.exports = async (req, res) => {
       return res.status(200).json(out);
     }
 
+    // 🇰🇷 아침 계기판 '한국장': /api/closing?krmkt=1
+    //    코스피·코스닥 지수(현재가·등락·거래대금·상승/하락 종목 수) + 투자자별(개인·외국인·기관) 매수·매도·순매수 금액
+    //    투자자 금액: KIS 시장별 투자자매매동향(시세) FHPTJ04030000 — 장중 잠정치, 단위 백만원 → 억원으로 바꿔서 보냄
+    if (qv("krmkt")) {
+      // 백만원 → 억원. 혹시 원 단위로 오면(절댓값이 비정상적으로 큼) 원 → 억원
+      const eok = v => { const n = num(v); if (n == null) return null; return Math.abs(n) > 5e7 ? +(n / 1e8).toFixed(1) : +(n / 100).toFixed(1); };
+      const one = async (mk, code, name) => {
+        const out = { name, code };
+        try {
+          const m = (await kis("/uapi/domestic-stock/v1/quotations/inquire-index-price", "FHPUP02100000", { FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: code }, auth)).output || {};
+          Object.assign(out, { value: num(m.bstp_nmix_prpr), diff: num(m.bstp_nmix_prdy_vrss), change: num(m.bstp_nmix_prdy_ctrt),
+            amount: eok(m.acml_tr_pbmn), up: num(m.ascn_issu_cnt), down: num(m.down_issu_cnt), flat: num(m.stnr_issu_cnt) });
+        } catch (e) { out.idxErr = String(e.message || e).slice(0, 60); }
+        await sleep(120);
+        try {
+          const d = await kis("/uapi/domestic-stock/v1/quotations/inquire-investor-time-by-market", "FHPTJ04030000", { FID_INPUT_ISCD: mk, FID_INPUT_ISCD_2: code }, auth);
+          const r = Array.isArray(d.output) ? d.output[0] : d.output;
+          if (r) {
+            const who = (k, label) => ({ label, buy: eok(r[k + "_shnu_tr_pbmn"]), sell: eok(r[k + "_seln_tr_pbmn"]), net: eok(r[k + "_ntby_tr_pbmn"]) });
+            const inv = [who("prsn", "개인"), who("frgn", "외국인"), who("orgn", "기관")];
+            if (inv.some(x => x.net != null)) out.investors = inv; else out.invErr = "투자자 금액 칸이 비어 있음";
+          } else out.invErr = "응답 없음";
+        } catch (e) { out.invErr = String(e.message || e).slice(0, 60); }
+        return out;
+      };
+      const kospi = await one("KSP", "0001", "코스피");
+      await sleep(120);
+      const kosdaq = await one("KSQ", "1001", "코스닥");
+      return res.status(200).json({ status: "ok", at: Date.now(), markets: [kospi, kosdaq] });
+    }
+
     // ⭐ 아침 계기판 '한국 시장 체온': /api/closing?market=1
     //    코스피 일별 약 330거래일 (200일선 그래프·7거래일 등락) + VKOSPI(코스피200 변동성지수) 현재값
     if (qv("market")) {
