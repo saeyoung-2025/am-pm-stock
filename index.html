@@ -1610,6 +1610,16 @@ const store = {
 let watch = store.get("mm_watch", []);          // [{code,name,th,dir,on, buy?,stop,take}]  buy = 내 매수가 (보유 중일 때만)
 watch.forEach(w => { if (!w.dir) w.dir = "both"; if (w.stop == null) w.stop = HOLD_DEF.stop; if (w.take == null) w.take = HOLD_DEF.take; });
 let wlQuotes = {}, wlAfter = null;
+// 20:00 애프터가 끝난 뒤에도, 다음 날 장이 열릴 때까지 마지막 애프터 가격을 보여 줌 ('마감' 표시)
+function keptAfter(){
+  if (marketOpen()) return null;
+  const k = store.get("mm_after", null); if (!k || !k.d) return null;
+  const p = kstParts(), t = p.h * 60 + p.mi;
+  // 오늘 받은 것 → 오늘 밤까지 / 전날(또는 주말 전 금요일) 받은 것 → 다음 장 시작(09:00) 전까지
+  const ok = k.day === todayKey() || ((t < 540 || !isTradingDay()) && Date.now() - ymdDate(k.day).getTime() < 4 * 864e5);
+  if (!ok) return null;
+  const d = JSON.parse(JSON.stringify(k.d)); Object.values(d).forEach(x => x.closed = true); return d;
+}
 let wlLoaded = false;
 let openCode = null;                              // 펼쳐진 종목
 const saveWatch = () => { store.set("mm_watch", watch); schedulePushSync(); };
@@ -1860,7 +1870,7 @@ function afterTag(code){
   if (!a || !a.price) return "";
   const v = a.vsClose;
   if (a.vol === 0) return `<span class="aft">${tipHTML("aft")}🌙 애프터 아직 거래 없음</span>`;
-  return `<span class="aft">${tipHTML("aft")}<em class="plab aftlab">🌙 애프터</em>${a.price.toLocaleString()}${v == null ? "" : ` <b class="${v > 0 ? "up" : v < 0 ? "down" : ""}">${pct(v)}</b>`}</span>`;
+  return `<span class="aft">${tipHTML("aft")}<em class="plab aftlab">🌙 애프터${a.closed ? " 마감" : ""}</em>${a.price.toLocaleString()}${v == null ? "" : ` <b class="${v > 0 ? "up" : v < 0 ? "down" : ""}">${pct(v)}</b>`}</span>`;
 }
 let invCache = {}, dartCache = {};
 function detailHTML(w){
@@ -1874,7 +1884,7 @@ function detailHTML(w){
   const regCh = q.change, aftCh = a && a.price && a.vol !== 0 ? a.vsClose : null;
   h += `<div class="pxsum">${tipHTML("pxsum")}
     <div><span>${marketOpen() ? "장중 지금" : "정규장 종가"}</span><b>${f(pr)}</b><em class="${cls(regCh)}">어제 대비 ${regCh == null ? "–" : pct(regCh)}</em></div>
-    ${a ? `<div class="aftc"><span>🌙 애프터</span>${a.vol === 0 ? `<b class="none">거래 없음</b><em>&nbsp;</em>` : `<b>${f(a.price)}</b><em class="${cls(aftCh)}">종가 대비 ${aftCh == null ? "–" : pct(aftCh)}</em>`}</div>` : ""}
+    ${a ? `<div class="aftc"><span>🌙 애프터${a.closed ? " (20:00 마감)" : ""}</span>${a.vol === 0 ? `<b class="none">거래 없음</b><em>&nbsp;</em>` : `<b>${f(a.price)}</b><em class="${cls(aftCh)}">종가 대비 ${aftCh == null ? "–" : pct(aftCh)}</em>`}</div>` : ""}
     </div>`;
   h += `<div class="dgrid">
     <div><span>시가</span><b>${f(q.open)}</b></div><div><span>고가</span><b class="up">${f(q.high)}</b></div>
@@ -1902,7 +1912,8 @@ function detailHTML(w){
   else h += `<div class="tips"><p>💬 지금은 특별한 신호가 없습니다. 평소 흐름대로 움직이는 중이에요.</p></div>`;
   const dc = dartCache[w.code];
   h += `<p class="dt">${tipHTML("d_dart")}📋 최근 공시 (30일)</p>`;
-  h += !dc ? `<p class="dsub">불러오는 중…</p>`
+  h += !dc ? `<p class="dsub">불러오는 중… <small>(처음 보는 종목은 DART에서 회사 번호를 찾느라 10초쯤 걸릴 수 있어요)</small></p>`
+     : dc.status === "fail" ? `<p class="dsub">공시를 못 불러왔어요 — 접었다가 다시 펼치면 다시 시도해요. (DART가 느릴 때가 있어요)</p>`
      : dc.status === "no_key" ? `<p class="dsub">DART 키를 넣으면 보여요 (📱💻 알림 카드 ④)</p>`
      : dc.note ? `<p class="dsub">${esc(dc.note)}</p>`
      : !(dc.items || []).length ? `<p class="dsub">최근 30일 공시 없음</p>`
@@ -1925,7 +1936,11 @@ document.getElementById("wlBody").addEventListener("click", async e => {
     if (openCode){
       await getDaily(w.code); renderWatch();
       if (!invCache[w.code]) { try { const j = await api("investor=" + w.code); if (j.status === "ok") invCache[w.code] = j.rows; } catch(e){} renderWatch(); }
-      if (!dartCache[w.code]) { try { dartCache[w.code] = await api("dart=" + w.code); } catch(e) { dartCache[w.code] = { status:"ok", items:[] }; } renderWatch(); }
+      if (!dartCache[w.code] || dartCache[w.code].status === "fail") {
+        try { dartCache[w.code] = await Promise.race([api("dart=" + w.code), new Promise((_, no) => setTimeout(() => no(new Error("timeout")), 25000))]); }
+        catch(e) { dartCache[w.code] = { status:"fail" }; }
+        renderWatch();
+      }
     }
     return;
   }
@@ -1967,7 +1982,11 @@ async function loadWatch(){
   if (!watch.length || location.protocol === "file:") { renderWatch(); return; }
   try {
     const j = await api("codes=" + watch.map(w => w.code).join(",") + (afterHours() ? "&after=1" : ""));
-    if (j.status === "ok") { wlQuotes = j.quotes || {}; wlAfter = j.after || null; }
+    if (j.status === "ok") {
+      wlQuotes = j.quotes || {};
+      if (j.after) { wlAfter = j.after; store.set("mm_after", { day: todayKey(), d: j.after }); }
+      else wlAfter = keptAfter();
+    }
   } catch(e) {}
   const p = kstParts();
   document.getElementById("wlUpdated").textContent = `${pad(p.h)}:${pad(p.mi)} 기준`;
