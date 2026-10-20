@@ -397,6 +397,10 @@
   .kr-row .bar i{position:absolute;top:2px;bottom:2px;border-radius:4px} .kr-row .bar i.up{background:#f0a59c} .kr-row .bar i.down{background:#8fb0ec}
   .kr-row .net{text-align:right;font-family:Nunito,sans-serif;font-weight:800}
   .kr-row .bs{grid-column:2 / 4;font-size:10.5px;color:var(--faint);margin-top:-2px}
+  .kr-after{margin-top:8px;padding:9px 11px;border-radius:10px;background:#f1efff;font-size:12.5px;line-height:1.6}
+  .kr-after b{font-size:13.5px} .kr-after small{color:var(--faint);font-size:11px} .kr-after p{margin:2px 0 0} .kr-after i{font-style:normal;font-weight:700}
+  .kr-after .kr-bw{font-size:11.5px;color:var(--sub)}
+  .aft small{margin-left:3px;color:var(--faint);font-size:10.5px}
   .kr-news{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);font-size:13px}
   .kr-news b{margin-right:4px}
   .kr-news a{padding:4px 11px;border-radius:99px;background:var(--chip);color:var(--accent);text-decoration:none;font-size:12px;font-weight:600}
@@ -947,14 +951,21 @@ function krHTML(){
       <div class="kr-sub">${tipHTML("m_kamt")}거래대금 ${eokTxt(m.amount)}${breadth}</div>
       <p class="kr-lab">${tipHTML("m_inv")}투자자별 순매수 <small>(빨강 = 산 쪽이 많음 · 파랑 = 판 쪽이 많음)</small></p>${inv}</div>`;
   };
-  return head + mk.map(one).join("") + KR_NEWS + `<p class="upd">${tipHTML("u_kr")}🕒 ${krAt ? hhmm(krAt) + " 받음" : "아직 안 받음"} · ${nextNote("mk")} · <small>장중 금액은 잠정치</small></p>`;
+  const af = KR.after;
+  const afterBox = !af ? "" : af.error ? `<div class="kr-after">${tipHTML("m_kafter")}<b>🌙 애프터마켓 체감</b> <span class="kr-none">${esc(af.error)}</span></div>`
+    : `<div class="kr-after">${tipHTML("m_kafter")}<b>🌙 애프터마켓 체감</b> <small>코스피 대형주 ${af.n}개 · NXT</small>
+        <p>종가 대비 평균 <b class="${af.avg > 0 ? "up" : af.avg < 0 ? "down" : ""}">${pct(af.avg)}</b> · <i class="up">▲${af.up}</i> <i class="down">▼${af.down}</i></p>
+        <p class="kr-bw">강한 쪽 ${af.best.map(x => `${esc(x.name)} <span class="${x.ch >= 0 ? "up" : "down"}">${pct(x.ch)}</span>`).join(", ")} · 약한 쪽 ${af.worst.map(x => `${esc(x.name)} <span class="${x.ch >= 0 ? "up" : "down"}">${pct(x.ch)}</span>`).join(", ")}</p></div>`;
+  return head + mk.map(one).join("") + afterBox + KR_NEWS + `<p class="upd">${tipHTML("u_kr")}🕒 ${krAt ? hhmm(krAt) + " 받음" : "아직 안 받음"} · ${afterHours() ? "애프터마켓 · 10분마다 자동 (~20:05)" : nextNote("mk")} · <small>장중 금액은 잠정치</small></p>`;
 }
+// 장중 10분마다 + 애프터마켓(15:40~20:05)에도 10분마다 (투자자 금액도 저녁에 확정값에 가까워짐)
+function krNeedsFetch(c){ if (afterHours()) return Date.now() - c.at >= 10 * 60 * 1000; return mkNeedsFetch(c); }
 async function loadKr(){
   if (location.protocol === "file:") return;
   let c = ls.get("mm_kr", null);
   if (c && !(c.d && Array.isArray(c.d.markets))) c = null;   // 예전에 잘못 저장된 값은 버림
-  if (c && !mkNeedsFetch(c)) KR = c.d;
-  else { try { const j = await api("krmkt=1"); if (j && j.status === "ok" && Array.isArray(j.markets)) { KR = j; ls.set("mm_kr", { at: Date.now(), d: j }); } else KR = c ? c.d : { markets: [], why: j && j.status === "ok" ? "서버가 아직 옛 버전이에요 (api/closing.js 확인)" : "서버 응답 오류" }; } catch(e) { KR = c ? c.d : { markets: [], why: "서버 연결 실패" }; } }
+  if (c && !krNeedsFetch(c)) KR = c.d;
+  else { try { const j = await api("krmkt=1" + (afterHours() ? "&after=1" : "")); if (j && j.status === "ok" && Array.isArray(j.markets)) { KR = j; ls.set("mm_kr", { at: Date.now(), d: j }); } else KR = c ? c.d : { markets: [], why: j && j.status === "ok" ? "서버가 아직 옛 버전이에요 (api/closing.js 확인)" : "서버 응답 오류" }; } catch(e) { KR = c ? c.d : { markets: [], why: "서버 연결 실패" }; } }
   krAt = (ls.get("mm_kr", null) || {}).at || null;
   const el = document.getElementById("krCard"); if (el) el.innerHTML = krHTML();
 }
@@ -1391,6 +1402,7 @@ const HOLD_DEF = { stop: -7, take: 10 };
 /* 📌 업데이트 기록 — 새로 바꿀 때마다 맨 위에 추가 */
 const UPDATE_LOG = [
   { date:"2026.10.20", tab:"morning", items:[
+    ["🌙 애프터마켓 체감", "장 마감 뒤에는 지수가 멈춰 있어서. 15:40~20:00에는 한국장 카드에 코스피 대형주 30개의 NXT 애프터 가격으로 '종가 대비 평균 %·오른/내린 수'를 추정해 보여 줘요 (공식 지수 아님). 투자자 금액도 저녁까지 10분마다 다시 받아 확정값에 가까워져요."],
     ["📰 금융 뉴스 바로가기", "매일 아침 한국 금융 뉴스를 쉽게 보려고. 한국장 카드 아래에 네이버 주요 뉴스·시황·전망, 다음 금융 뉴스 링크."],
     ["🇰🇷 한국장 카드 (코스피·코스닥)", "한국 관련 코너에 정작 한국 지수가 없어서. VKOSPI 바로 아래에 코스피·코스닥 지수·등락·거래대금·오른/내린 종목 수, 그리고 개인·외국인·기관 순매수(억 원) 막대그래프. 장중 10분마다 갱신."],
   ]},
@@ -1837,7 +1849,9 @@ function afterTag(code){
   const a = wlAfter && wlAfter[code];
   if (!a || !a.price) return "";
   const v = a.vsClose;
-  return `<span class="aft">애프터 ${a.price.toLocaleString()}${v == null ? "" : ` <span class="${v >= 0 ? "up" : "down"}">${pct(v)}</span>`}</span>`;
+  if (a.vol === 0) return `<span class="aft">${tipHTML("aft")}애프터 아직 거래 없음</span>`;
+  const volTxt = a.vol ? ` · ${a.vol >= 10000 ? (a.vol / 10000).toFixed(1) + "만" : a.vol.toLocaleString()}주` : "";
+  return `<span class="aft">${tipHTML("aft")}🌙 애프터 ${a.price.toLocaleString()}${v == null ? "" : ` <span class="${v > 0 ? "up" : v < 0 ? "down" : ""}">${pct(v)}</span>`}<small>${volTxt}</small></span>`;
 }
 let invCache = {}, dartCache = {};
 function detailHTML(w){
@@ -2003,7 +2017,7 @@ function checkAlerts(){
 // 장중 + 애프터마켓(~20:00)에는 앱이 열려 있는 동안 5분마다 확인
 setInterval(() => { if ((marketOpen() || afterHours()) && watch.length) loadWatch(); }, 5 * 60 * 1000);
 // 아침 탭: 1분마다 '받을 때가 됐나'만 확인 → 때가 됐을 때만 실제로 받음
-setInterval(() => { if (currentTab !== "morning") return; const c = ls.get("mm_market", null); if (!c || mkNeedsFetch(c)) loadMarket(); const kc = ls.get("mm_kr", null); if (!kc || !(kc.d && kc.d.markets) || mkNeedsFetch(kc)) loadKr(); const d = ls.get("mm_debt", null); if (!d || d.slot !== debtSlot()) loadDebt(); }, 60 * 1000);
+setInterval(() => { if (currentTab !== "morning") return; const c = ls.get("mm_market", null); if (!c || mkNeedsFetch(c)) loadMarket(); const kc = ls.get("mm_kr", null); if (!kc || !(kc.d && kc.d.markets) || krNeedsFetch(kc)) loadKr(); const d = ls.get("mm_debt", null); if (!d || d.slot !== debtSlot()) loadDebt(); }, 60 * 1000);
 document.getElementById("refresh").addEventListener("click", refresh);
 refresh();
 /* ── 💰 매수 기록 입력 창 (실전/연습 · 기분) ── */
@@ -2332,12 +2346,14 @@ async function loadPhone(){
 
 /* ── ? 메모 (마우스를 올리거나 누르면 설명) ── */
 const TIPS = {
+  m_kafter:["🌙 애프터마켓 체감", "<b>코스피·코스닥 지수는 15:30 장 마감 뒤에는 계산되지 않아요</b> (증권사 앱도 같아요). 그래서 장 마감 뒤 분위기를 보려고, 넥스트레이드(NXT) 애프터마켓(15:40~20:00)에서 거래되는 <b>코스피 대형주 30개</b>가 오늘 종가보다 평균 몇 % 움직였는지 보여 줘요.<br>• ▲/▼: 오른·내린 종목 수 · 강한 쪽/약한 쪽: 가장 많이 오르고 내린 2종목", "공식 지수가 아니라 <b>추정 체감값</b>이에요. 단순 평균이라 삼성전자 같은 큰 종목 비중은 반영 안 돼요. 애프터 거래가 없는 종목은 빼고 계산. 15:40~20:05 동안 10분마다 갱신."],
+  aft:["🌙 애프터 (NXT)", "장 마감 뒤 넥스트레이드 애프터마켓(15:40~20:00) 가격과 <b>오늘 종가 대비 %</b>, 거래량(주).", "'아직 거래 없음'이면 그 종목은 애프터에서 아직 체결이 없다는 뜻. 거래량이 아주 적으면 가격이 크게 튀어도 의미가 약해요. 5분마다 갱신."],
   m_krnews:["📰 오늘의 금융 뉴스", "네이버 금융·다음 금융의 뉴스 페이지로 바로 가는 링크예요 (새 창).<br>• <b>주요 뉴스</b>: 오늘 많이 본 증권·경제 기사<br>• <b>시황·전망</b>: 장 시작 전/마감 후 시장 정리 기사 — 아침에 보기 좋아요<br>• <b>다음 금융</b>: 같은 날 다른 시각의 기사", "기사를 앱으로 끌어오지 않고 링크만 둔 건, 사이트 이용 규칙을 지키고 늘 최신 화면을 그대로 보기 위해서예요."],
   m_kr:["🇰🇷 한국장 (코스피·코스닥)", "한국 주식시장 전체 분위기. 지수 현재값, 어제 대비 등락, 거래대금, 오르고 내린 종목 수, 그리고 <b>누가 사고 누가 팔았는지</b>(개인·외국인·기관).", "자료: 한국투자증권 KIS API. 장중 10분마다, 장 마감 뒤 15:40에 한 번 더 받아요."],
   m_kamt:["거래대금", "오늘 그 시장에서 사고판 돈의 합계 (억·조 원).", "평소보다 확 많으면 큰 움직임(급등·급락)이 있다는 뜻. 코스피는 보통 하루 10조 안팎."],
   m_breadth:["▲ 오른 종목 · ▼ 내린 종목 · － 보합", "시장 안에서 오른 종목과 내린 종목의 수.", "지수는 올랐는데 ▼가 훨씬 많으면 '몇몇 대형주만 오른' 장 — 분위기는 생각보다 약해요."],
   m_inv:["투자자별 순매수", "<b>순매수 = 산 금액 − 판 금액</b> (억 원).<br>• 빨강 막대(+): 산 쪽이 많음 · 파랑 막대(−): 판 쪽이 많음<br>• 개인 · 외국인 · 기관(연기금·투신·보험·은행 등 합계)<br>아래 작은 글씨는 실제 매수·매도 금액.", "보통 세 주체의 합은 0 근처(누군가 사면 누군가 판다). 외국인과 기관이 <b>같이</b> 크게 팔면 지수가 약해지기 쉬워요. 장중 숫자는 증권사 잠정치라 장 마감 후 조금 달라질 수 있어요."],
-  u_kr:["🕒 한국장 갱신", "장중(09:00~15:30) 10분마다 / 장 마감 뒤 15:40에 한 번(확정에 가까운 값) / 그 외 시간은 마지막 값 그대로.", "체온·VKOSPI와 같은 주기."],
+  u_kr:["🕒 한국장 갱신", "장중(09:00~15:30) 10분마다 / 애프터마켓(15:40~20:05)에도 10분마다 — 지수는 종가 그대로, 투자자 금액은 저녁에 확정값에 가까워지고 🌙 애프터 체감이 붙어요 / 그 외 시간은 마지막 값 그대로.", "밤·주말엔 서버를 부르지 않아요."],
   gd_dirty:["⚠️ 아직 동기화 안 됨", "이 기기에서 관심종목·매매기록·알림 설정을 고친 뒤 아직 <b>⬆️ 보내기</b>를 안 했다는 표시예요. 매매기록 탭 버튼의 <b>빨간 점</b>도 같은 뜻.<br>보내기(또는 받기)를 하면 사라져요.", "다른 기기에서는 ⬇️ 받기를 해야 바뀐 기록이 보여요. 성적표 자동 기록(종가베팅 후보)은 고친 걸로 치지 않아요."],
   gdrive:["☁️ 폰 ↔ PC 같이 보기 (구글 드라이브)", "<b>먼저 알아 두세요</b><br>이 앱은 기록을 <b>지금 쓰는 기기(브라우저) 안에만</b> 저장해요. 따로 회원가입·계정 서버가 없어서, 폰과 PC 기록은 처음엔 서로 따로예요.<br>다른 기기에서도 같은 기록을 보고 싶다면 <b>내 구글 드라이브로 주고받으면</b> 돼요.<br><br><b>주고받는 방법</b><br>① 기록한 기기에서 <b>⬆️ 보내기</b> → 구글 계정 고르기 (처음 한 번 '허용')<br>② 다른 기기에서 <b>⬇️ 받기</b> → <b>같은 구글 계정</b> 고르기 → '바꿀까요?'에 확인<br>③ 다시 그 기기에서 기록했으면 → 거기서 ⬆️ 보내기 → 반대편에서 ⬇️ 받기", "참고: 폰 알림을 켜 두면 알림 계산용으로 관심종목 목록(코드·매수가·손절·목표)만 알림 서버에 올라가요. 매매일지는 올라가지 않아요."],
   tr_add:["💰 매수 기록", "산 종목(연습이면 '샀다 치는' 종목)의 이름이나 코드를 넣고 누르세요. 매수 창이 열려요: 실전/연습, 매수가, 수량, 산 날짜, 손절·목표, 이유, 기분.", "관심종목에 없던 종목이면 관심종목에도 자동으로 들어가서 손절·목표 폰 알림이 붙어요. (한 종목은 한 번에 하나의 보유 기록만)"],
