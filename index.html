@@ -397,6 +397,9 @@
   .kr-row .bar i{position:absolute;top:2px;bottom:2px;border-radius:4px} .kr-row .bar i.up{background:#f0a59c} .kr-row .bar i.down{background:#8fb0ec}
   .kr-row .net{text-align:right;font-family:Nunito,sans-serif;font-weight:800}
   .kr-row .bs{grid-column:2 / 4;font-size:10.5px;color:var(--faint);margin-top:-2px}
+  .kr-news{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);font-size:13px}
+  .kr-news b{margin-right:4px}
+  .kr-news a{padding:4px 11px;border-radius:99px;background:var(--chip);color:var(--accent);text-decoration:none;font-size:12px;font-weight:600}
   /* ☁️ 구글 드라이브 */
   .gd-card{padding:12px 14px}
   .gd-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:14px} .gd-top span{margin-left:auto;font-size:11.5px;color:var(--faint)}
@@ -913,14 +916,19 @@ async function loadMarket(){
 }
 /* ── 🇰🇷 한국장: 코스피·코스닥 + 투자자별 매수·매도 (KIS, 장중 10분마다) ── */
 let KR = null, krAt = null;
+// 📰 한국 금융 뉴스 바로가기 (기사를 가져오지 않고 링크만 — 누르면 새 창)
+const KR_NEWS = `<div class="kr-news">${tipHTML("m_krnews")}<b>📰 오늘의 금융 뉴스</b>
+  <a href="https://finance.naver.com/news/mainnews.naver" target="_blank" rel="noopener">네이버 · 주요 뉴스</a>
+  <a href="https://finance.naver.com/news/news_list.naver?mode=LSS2D&section_id=101&section_id2=258" target="_blank" rel="noopener">네이버 · 시황·전망</a>
+  <a href="https://finance.daum.net/news" target="_blank" rel="noopener">다음 금융 · 뉴스</a></div>`;
 const eokTxt = v => v == null ? "–" : Math.abs(v) >= 10000 ? (v / 10000).toFixed(1) + "조" : Math.round(v).toLocaleString() + "억";
 const sgnEok = v => v == null ? "–" : (v > 0 ? "+" : v < 0 ? "−" : "") + eokTxt(Math.abs(v));
 function krHTML(){
   const head = `<div class="kr-head">${tipHTML("m_kr")}<b>🇰🇷 한국장</b><em>코스피 · 코스닥 · KIS</em></div>`;
-  if (!KR) return head + `<p class="kr-none">불러오는 중…</p>`;
+  if (!KR) return head + `<p class="kr-none">불러오는 중…</p>` + KR_NEWS;
   const mk = (KR.markets || []);
   const why = KR.why || (mk[0] && mk[0].idxErr) || "";
-  if (!mk.length || mk.every(m => m.value == null)) return head + `<p class="kr-none">데이터 없음${why ? ` <small>(${esc(why)})</small>` : ""}</p>`;
+  if (!mk.length || mk.every(m => m.value == null)) return head + `<p class="kr-none">데이터 없음${why ? ` <small>(${esc(why)})</small>` : ""}</p>` + KR_NEWS;
   // 막대 길이: 두 시장 · 세 주체 순매수 중 가장 큰 값 기준
   const all = mk.flatMap(m => (m.investors || []).map(x => Math.abs(x.net || 0)));
   const maxN = Math.max(...all, 1);
@@ -939,7 +947,7 @@ function krHTML(){
       <div class="kr-sub">${tipHTML("m_kamt")}거래대금 ${eokTxt(m.amount)}${breadth}</div>
       <p class="kr-lab">${tipHTML("m_inv")}투자자별 순매수 <small>(빨강 = 산 쪽이 많음 · 파랑 = 판 쪽이 많음)</small></p>${inv}</div>`;
   };
-  return head + mk.map(one).join("") + `<p class="upd">${tipHTML("u_kr")}🕒 ${krAt ? hhmm(krAt) + " 받음" : "아직 안 받음"} · ${nextNote("mk")} · <small>장중 금액은 잠정치</small></p>`;
+  return head + mk.map(one).join("") + KR_NEWS + `<p class="upd">${tipHTML("u_kr")}🕒 ${krAt ? hhmm(krAt) + " 받음" : "아직 안 받음"} · ${nextNote("mk")} · <small>장중 금액은 잠정치</small></p>`;
 }
 async function loadKr(){
   if (location.protocol === "file:") return;
@@ -1383,6 +1391,7 @@ const HOLD_DEF = { stop: -7, take: 10 };
 /* 📌 업데이트 기록 — 새로 바꿀 때마다 맨 위에 추가 */
 const UPDATE_LOG = [
   { date:"2026.10.20", tab:"morning", items:[
+    ["📰 금융 뉴스 바로가기", "매일 아침 한국 금융 뉴스를 쉽게 보려고. 한국장 카드 아래에 네이버 주요 뉴스·시황·전망, 다음 금융 뉴스 링크."],
     ["🇰🇷 한국장 카드 (코스피·코스닥)", "한국 관련 코너에 정작 한국 지수가 없어서. VKOSPI 바로 아래에 코스피·코스닥 지수·등락·거래대금·오른/내린 종목 수, 그리고 개인·외국인·기관 순매수(억 원) 막대그래프. 장중 10분마다 갱신."],
   ]},
   { date:"2026.10.19", tab:"trade", items:[
@@ -2323,6 +2332,7 @@ async function loadPhone(){
 
 /* ── ? 메모 (마우스를 올리거나 누르면 설명) ── */
 const TIPS = {
+  m_krnews:["📰 오늘의 금융 뉴스", "네이버 금융·다음 금융의 뉴스 페이지로 바로 가는 링크예요 (새 창).<br>• <b>주요 뉴스</b>: 오늘 많이 본 증권·경제 기사<br>• <b>시황·전망</b>: 장 시작 전/마감 후 시장 정리 기사 — 아침에 보기 좋아요<br>• <b>다음 금융</b>: 같은 날 다른 시각의 기사", "기사를 앱으로 끌어오지 않고 링크만 둔 건, 사이트 이용 규칙을 지키고 늘 최신 화면을 그대로 보기 위해서예요."],
   m_kr:["🇰🇷 한국장 (코스피·코스닥)", "한국 주식시장 전체 분위기. 지수 현재값, 어제 대비 등락, 거래대금, 오르고 내린 종목 수, 그리고 <b>누가 사고 누가 팔았는지</b>(개인·외국인·기관).", "자료: 한국투자증권 KIS API. 장중 10분마다, 장 마감 뒤 15:40에 한 번 더 받아요."],
   m_kamt:["거래대금", "오늘 그 시장에서 사고판 돈의 합계 (억·조 원).", "평소보다 확 많으면 큰 움직임(급등·급락)이 있다는 뜻. 코스피는 보통 하루 10조 안팎."],
   m_breadth:["▲ 오른 종목 · ▼ 내린 종목 · － 보합", "시장 안에서 오른 종목과 내린 종목의 수.", "지수는 올랐는데 ▼가 훨씬 많으면 '몇몇 대형주만 오른' 장 — 분위기는 생각보다 약해요."],
