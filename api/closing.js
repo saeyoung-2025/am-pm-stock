@@ -492,6 +492,58 @@ module.exports = async (req, res) => {
       return res.status(200).json(out);
     }
 
+    // 📈 아침 계기판 '코스피200 선물': /api/closing?fut=1
+    //    선물은 3·6·9·12월 둘째 목요일이 만기라 3개월마다 종목코드가 바뀜 → '선물 전광판'에서 남은 날이 가장 적은(=가장 가까운 달) 종목을 고름
+    //    주간(08:45~15:45)은 F, 야간(18:00~다음날 05:00)은 CM 시장코드로 시세 조회 (야간은 안 되면 '데이터 없음' + 이유)
+    if (qv("fut")) {
+      const out = { status: "ok", at: Date.now() };
+      const signed = (v, sign) => { let n = num(v); if (n != null && n > 0 && (sign === "4" || sign === "5")) n = -n; return n; };
+      let code = null, name = null, rmnn = null;
+      try { const c = await redis("GET", `amp:futcode:${today}`); if (c) ({ code, name, rmnn } = JSON.parse(c)); } catch (e) {}
+      if (!code) {
+        try {
+          const d = await kis("/uapi/domestic-futureoption/v1/quotations/display-board-futures", "FHPIF05030200",
+            { FID_COND_MRKT_DIV_CODE: "F", FID_COND_SCR_DIV_CODE: "20503", FID_COND_MRKT_CLS_CODE: "" }, auth);
+          const list = (Array.isArray(d.output) ? d.output : []).filter(x => /^1\d{2}[0-9A-Z]{3}$/.test(x.futs_shrn_iscd || "") && x.futs_shrn_iscd.startsWith("101"))
+            .map(x => ({ code: x.futs_shrn_iscd, name: x.hts_kor_isnm, rmnn: num(x.hts_rmnn_dynu) })).filter(x => x.rmnn != null && x.rmnn >= 0)
+            .sort((a, b) => a.rmnn - b.rmnn);
+          if (list[0]) ({ code, name, rmnn } = list[0]);
+          else out.listErr = "전광판에 코스피200 선물이 없음";
+        } catch (e) { out.listErr = String(e.message || e).slice(0, 60); }
+        // 예비: 전광판이 안 되면 코드를 직접 만들어 시도 (101 + 연도 글자 + 월). 2025=W 기준(U는 건너뜀 → 2026=X)
+        if (!code) {
+          const y = +today.slice(0, 4), m = +today.slice(4, 6), dd = +today.slice(6);
+          const secondThu = (yy, mm) => { const f = new Date(Date.UTC(yy, mm - 1, 1)).getUTCDay(); return 1 + ((4 - f + 7) % 7) + 7; };
+          let qy = y, qm = Math.ceil(m / 3) * 3;
+          if (m === qm && dd > secondThu(y, m)) { qm += 3; if (qm > 12) { qm = 3; qy++; } }
+          const L = "ABCDEFGHJKLMNPQRSTVWXYZ";   // I·O·U 등은 안 씀 (W=2025)
+          const letter = L[(L.indexOf("W") + (qy - 2025)) % L.length];
+          for (const cand of [`101${letter}${String(qm).padStart(2, "0")}`]) {
+            try {
+              const d = await kis("/uapi/domestic-futureoption/v1/quotations/inquire-price", "FHMIF10000000", { FID_COND_MRKT_DIV_CODE: "F", FID_INPUT_ISCD: cand }, auth);
+              if (d.output1 && num(d.output1.futs_prpr)) { code = cand; name = d.output1.hts_kor_isnm || `F ${qy}${String(qm).padStart(2,"0")}`; rmnn = num(d.output1.hts_rmnn_dynu); out.guessed = true; }
+            } catch (e) { out.guessErr = cand + ": " + String(e.message || e).slice(0, 40); }
+          }
+        }
+        if (code) { try { await redis("SET", `amp:futcode:${today}`, JSON.stringify({ code, name, rmnn }), "EX", 86400); } catch (e) {} }
+      }
+      if (!code) return res.status(200).json(out);
+      Object.assign(out, { code, name, rmnn });
+      const quote = async mk => {
+        const d = await kis("/uapi/domestic-futureoption/v1/quotations/inquire-price", "FHMIF10000000", { FID_COND_MRKT_DIV_CODE: mk, FID_INPUT_ISCD: code }, auth);
+        const o = d.output1 || {}, ix = d.output3 || {};
+        const price = num(o.futs_prpr);
+        if (!price) throw new Error("가격 칸 비어 있음");
+        return { price, diff: signed(o.futs_prdy_vrss, o.prdy_vrss_sign), change: signed(o.futs_prdy_ctrt, o.prdy_vrss_sign),
+          vol: num(o.acml_vol), high: num(o.futs_hgpr), low: num(o.futs_lwpr), last: o.futs_last_tr_date || null,
+          k200: num(ix.bstp_nmix_prpr) };
+      };
+      try { out.day = await quote("F"); } catch (e) { out.dayErr = String(e.message || e).slice(0, 60); }
+      await sleep(120);
+      try { out.night = await quote("CM"); } catch (e) { out.nightErr = String(e.message || e).slice(0, 60); }
+      return res.status(200).json(out);
+    }
+
     // 🇰🇷 아침 계기판 '한국장': /api/closing?krmkt=1
     //    코스피·코스닥 지수(현재가·등락·거래대금·상승/하락 종목 수) + 투자자별(개인·외국인·기관) 매수·매도·순매수 금액
     //    투자자 금액: KIS 시장별 투자자매매동향(시세) FHPTJ04030000 — 장중 잠정치, 단위 백만원 → 억원으로 바꿔서 보냄
