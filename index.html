@@ -400,7 +400,16 @@
   .kr-after{margin-top:8px;padding:9px 11px;border-radius:10px;background:#f1efff;font-size:12.5px;line-height:1.6}
   .kr-after b{font-size:13.5px} .kr-after small{color:var(--faint);font-size:11px} .kr-after p{margin:2px 0 0} .kr-after i{font-style:normal;font-weight:700}
   .kr-after .kr-bw{font-size:11.5px;color:var(--sub)}
-  .aft small{margin-left:3px;color:var(--faint);font-size:10.5px}
+  .aft b{font-weight:700}
+  .plab{font-style:normal;font-size:10px;color:var(--faint);font-weight:400;margin-right:3px;font-family:"Gowun Dodum"}
+  .pxsum{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-bottom:10px;position:relative}
+  .pxsum > .tip{position:absolute;top:-6px;left:-6px}
+  .pxsum > div{background:#fff;border-radius:10px;padding:7px 9px;border:1px solid #eef2f9}
+  .pxsum > div.aftc{background:#f6f2ff;border-color:#e4dcff}
+  .pxsum span{display:block;font-size:11px;color:var(--faint)} .pxsum b{display:block;font-family:Nunito,sans-serif;font-weight:800;font-size:15px}
+  .pxsum b.none{font-family:inherit;font-weight:400;font-size:12px;color:var(--faint)}
+  .pxsum em{display:block;font-style:normal;font-size:10.5px;font-weight:600;white-space:nowrap}
+  .pxsum span{white-space:nowrap} .pxsum > div{min-width:0;overflow:hidden}
   .kr-news{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);font-size:13px}
   .kr-news b{margin-right:4px}
   .kr-news a{padding:4px 11px;border-radius:99px;background:var(--chip);color:var(--accent);text-decoration:none;font-size:12px;font-weight:600}
@@ -1402,6 +1411,7 @@ const HOLD_DEF = { stop: -7, take: 10 };
 /* 📌 업데이트 기록 — 새로 바꿀 때마다 맨 위에 추가 */
 const UPDATE_LOG = [
   { date:"2026.10.20", tab:"morning", items:[
+    ["장 마감 뒤 종가 고정", "장 마감 뒤에 위 가격이 시간외 거래 때문에 움직여서 애프터 가격과 늘 똑같이(0.00%) 보이던 문제. 이제 위 가격은 오늘 공식 종가(일봉)로 고정하고, 애프터는 그 종가와 비교해요."],
     ["🌙 애프터마켓 체감", "장 마감 뒤에는 지수가 멈춰 있어서. 15:40~20:00에는 한국장 카드에 코스피 대형주 30개의 NXT 애프터 가격으로 '종가 대비 평균 %·오른/내린 수'를 추정해 보여 줘요 (공식 지수 아님). 투자자 금액도 저녁까지 10분마다 다시 받아 확정값에 가까워져요."],
     ["📰 금융 뉴스 바로가기", "매일 아침 한국 금융 뉴스를 쉽게 보려고. 한국장 카드 아래에 네이버 주요 뉴스·시황·전망, 다음 금융 뉴스 링크."],
     ["🇰🇷 한국장 카드 (코스피·코스닥)", "한국 관련 코너에 정작 한국 지수가 없어서. VKOSPI 바로 아래에 코스피·코스닥 지수·등락·거래대금·오른/내린 종목 수, 그리고 개인·외국인·기관 순매수(억 원) 막대그래프. 장중 10분마다 갱신."],
@@ -1771,7 +1781,7 @@ function renderWatch(){
       <div class="r1" data-i="${i}" data-act="open">
         <div class="nm">${tipHTML("p_open")}<b>${esc(w.name)}</b> <span class="chev">${openCode === w.code ? "▴" : "▾"}</span></div>
         <div class="px">${q && q.price != null ? q.price.toLocaleString() : "–"}
-          <small class="${ch == null ? "" : ch >= 0 ? "up" : "down"}">${ch == null ? "데이터 없음" : pct(ch)}</small>${afterTag(w.code)}</div>
+          <small class="${ch == null ? "" : ch >= 0 ? "up" : "down"}">${ch == null ? "데이터 없음" : `<em class="plab">${marketOpen() ? "장중" : "정규장"}</em>${pct(ch)}`}</small>${afterTag(w.code)}</div>
       </div>
       ${ovHTML(w)}
       ${holdHTML(w, i)}
@@ -1849,9 +1859,8 @@ function afterTag(code){
   const a = wlAfter && wlAfter[code];
   if (!a || !a.price) return "";
   const v = a.vsClose;
-  if (a.vol === 0) return `<span class="aft">${tipHTML("aft")}애프터 아직 거래 없음</span>`;
-  const volTxt = a.vol ? ` · ${a.vol >= 10000 ? (a.vol / 10000).toFixed(1) + "만" : a.vol.toLocaleString()}주` : "";
-  return `<span class="aft">${tipHTML("aft")}🌙 애프터 ${a.price.toLocaleString()}${v == null ? "" : ` <span class="${v > 0 ? "up" : v < 0 ? "down" : ""}">${pct(v)}</span>`}<small>${volTxt}</small></span>`;
+  if (a.vol === 0) return `<span class="aft">${tipHTML("aft")}🌙 애프터 아직 거래 없음</span>`;
+  return `<span class="aft">${tipHTML("aft")}<em class="plab aftlab">🌙 애프터</em>${a.price.toLocaleString()}${v == null ? "" : ` <b class="${v > 0 ? "up" : v < 0 ? "down" : ""}">${pct(v)}</b>`}</span>`;
 }
 let invCache = {}, dartCache = {};
 function detailHTML(w){
@@ -1859,6 +1868,14 @@ function detailHTML(w){
   const f = v => v == null ? "–" : v.toLocaleString();
   const qty = v => v == null ? "–" : (v > 0 ? "+" : "") + v.toLocaleString() + "주";
   let h = `<div class="detail">`;
+  // 📊 오늘 등락 한눈에: 정규장 / 애프터 / 합쳐서
+  const a = wlAfter && wlAfter[w.code], pr = q.price, pv = q.prev;
+  const cls = v => v == null ? "" : v > 0 ? "up" : v < 0 ? "down" : "";
+  const regCh = q.change, aftCh = a && a.price && a.vol !== 0 ? a.vsClose : null;
+  h += `<div class="pxsum">${tipHTML("pxsum")}
+    <div><span>${marketOpen() ? "장중 지금" : "정규장 종가"}</span><b>${f(pr)}</b><em class="${cls(regCh)}">어제 대비 ${regCh == null ? "–" : pct(regCh)}</em></div>
+    ${a ? `<div class="aftc"><span>🌙 애프터</span>${a.vol === 0 ? `<b class="none">거래 없음</b><em>&nbsp;</em>` : `<b>${f(a.price)}</b><em class="${cls(aftCh)}">종가 대비 ${aftCh == null ? "–" : pct(aftCh)}</em>`}</div>` : ""}
+    </div>`;
   h += `<div class="dgrid">
     <div><span>시가</span><b>${f(q.open)}</b></div><div><span>고가</span><b class="up">${f(q.high)}</b></div>
     <div><span>저가</span><b class="down">${f(q.low)}</b></div><div><span>어제 종가</span><b>${f(q.prev)}</b></div>
@@ -2346,8 +2363,9 @@ async function loadPhone(){
 
 /* ── ? 메모 (마우스를 올리거나 누르면 설명) ── */
 const TIPS = {
+  pxsum:["📊 오늘 등락 한눈에", "<b>정규장</b>(09:00~15:30) 등락과 <b>애프터</b>(15:40~20:00, 넥스트레이드) 등락을 따로 보여 줘요.<br>• 정규장 종가: 어제 종가보다 몇 %<br>• 🌙 애프터: 오늘 종가보다 몇 % 더 움직였나", "애프터 %는 오늘 정규장 종가를 0%로 놓고 다시 잰 값. 예) 정규장 −4.13%, 애프터 +0.96%면 '낮에 많이 빠졌다가 저녁에 조금 되찾는 중'. 애프터 칸은 15:40~20:00 거래분이 보여요."],
   m_kafter:["🌙 애프터마켓 체감", "<b>코스피·코스닥 지수는 15:30 장 마감 뒤에는 계산되지 않아요</b> (증권사 앱도 같아요). 그래서 장 마감 뒤 분위기를 보려고, 넥스트레이드(NXT) 애프터마켓(15:40~20:00)에서 거래되는 <b>코스피 대형주 30개</b>가 오늘 종가보다 평균 몇 % 움직였는지 보여 줘요.<br>• ▲/▼: 오른·내린 종목 수 · 강한 쪽/약한 쪽: 가장 많이 오르고 내린 2종목", "공식 지수가 아니라 <b>추정 체감값</b>이에요. 단순 평균이라 삼성전자 같은 큰 종목 비중은 반영 안 돼요. 애프터 거래가 없는 종목은 빼고 계산. 15:40~20:05 동안 10분마다 갱신."],
-  aft:["🌙 애프터 (NXT)", "장 마감 뒤 넥스트레이드 애프터마켓(15:40~20:00) 가격과 <b>오늘 종가 대비 %</b>, 거래량(주).", "'아직 거래 없음'이면 그 종목은 애프터에서 아직 체결이 없다는 뜻. 거래량이 아주 적으면 가격이 크게 튀어도 의미가 약해요. 5분마다 갱신."],
+  aft:["🌙 애프터 (NXT)", "장 마감 뒤 넥스트레이드 애프터마켓(15:40~20:00) 가격과 <b>오늘 정규장 종가 대비 %</b>. 뒤의 '○○주'는 넥스트레이드에서 오늘 하루 거래된 양이에요.<br>장 마감 뒤에는 위의 큰 가격이 <b>오늘 공식 종가</b>로 고정돼요.", "'아직 거래 없음'이면 그 종목은 애프터에서 아직 체결이 없다는 뜻. 거래량이 아주 적으면 가격이 크게 튀어도 의미가 약해요. 5분마다 갱신."],
   m_krnews:["📰 오늘의 금융 뉴스", "네이버 금융·다음 금융의 뉴스 페이지로 바로 가는 링크예요 (새 창).<br>• <b>주요 뉴스</b>: 오늘 많이 본 증권·경제 기사<br>• <b>시황·전망</b>: 장 시작 전/마감 후 시장 정리 기사 — 아침에 보기 좋아요<br>• <b>다음 금융</b>: 같은 날 다른 시각의 기사", "기사를 앱으로 끌어오지 않고 링크만 둔 건, 사이트 이용 규칙을 지키고 늘 최신 화면을 그대로 보기 위해서예요."],
   m_kr:["🇰🇷 한국장 (코스피·코스닥)", "한국 주식시장 전체 분위기. 지수 현재값, 어제 대비 등락, 거래대금, 오르고 내린 종목 수, 그리고 <b>누가 사고 누가 팔았는지</b>(개인·외국인·기관).", "자료: 한국투자증권 KIS API. 장중 10분마다, 장 마감 뒤 15:40에 한 번 더 받아요."],
   m_kamt:["거래대금", "오늘 그 시장에서 사고판 돈의 합계 (억·조 원).", "평소보다 확 많으면 큰 움직임(급등·급락)이 있다는 뜻. 코스피는 보통 하루 10조 안팎."],
