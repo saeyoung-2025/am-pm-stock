@@ -919,7 +919,8 @@ function krHTML(){
   const head = `<div class="kr-head">${tipHTML("m_kr")}<b>🇰🇷 한국장</b><em>코스피 · 코스닥 · KIS</em></div>`;
   if (!KR) return head + `<p class="kr-none">불러오는 중…</p>`;
   const mk = (KR.markets || []);
-  if (!mk.length || mk.every(m => m.value == null)) return head + `<p class="kr-none">데이터 없음${mk[0] && mk[0].idxErr ? ` <small>(${esc(mk[0].idxErr)})</small>` : ""}</p>`;
+  const why = KR.why || (mk[0] && mk[0].idxErr) || "";
+  if (!mk.length || mk.every(m => m.value == null)) return head + `<p class="kr-none">데이터 없음${why ? ` <small>(${esc(why)})</small>` : ""}</p>`;
   // 막대 길이: 두 시장 · 세 주체 순매수 중 가장 큰 값 기준
   const all = mk.flatMap(m => (m.investors || []).map(x => Math.abs(x.net || 0)));
   const maxN = Math.max(...all, 1);
@@ -942,9 +943,10 @@ function krHTML(){
 }
 async function loadKr(){
   if (location.protocol === "file:") return;
-  const c = ls.get("mm_kr", null);
+  let c = ls.get("mm_kr", null);
+  if (c && !(c.d && Array.isArray(c.d.markets))) c = null;   // 예전에 잘못 저장된 값은 버림
   if (c && !mkNeedsFetch(c)) KR = c.d;
-  else { try { const j = await api("krmkt=1"); if (j && j.status === "ok") { KR = j; ls.set("mm_kr", { at: Date.now(), d: j }); } else if (c) KR = c.d; } catch(e) { if (c) KR = c.d; } }
+  else { try { const j = await api("krmkt=1"); if (j && j.status === "ok" && Array.isArray(j.markets)) { KR = j; ls.set("mm_kr", { at: Date.now(), d: j }); } else KR = c ? c.d : { markets: [], why: j && j.status === "ok" ? "서버가 아직 옛 버전이에요 (api/closing.js 확인)" : "서버 응답 오류" }; } catch(e) { KR = c ? c.d : { markets: [], why: "서버 연결 실패" }; } }
   krAt = (ls.get("mm_kr", null) || {}).at || null;
   const el = document.getElementById("krCard"); if (el) el.innerHTML = krHTML();
 }
@@ -1992,7 +1994,7 @@ function checkAlerts(){
 // 장중 + 애프터마켓(~20:00)에는 앱이 열려 있는 동안 5분마다 확인
 setInterval(() => { if ((marketOpen() || afterHours()) && watch.length) loadWatch(); }, 5 * 60 * 1000);
 // 아침 탭: 1분마다 '받을 때가 됐나'만 확인 → 때가 됐을 때만 실제로 받음
-setInterval(() => { if (currentTab !== "morning") return; const c = ls.get("mm_market", null); if (!c || mkNeedsFetch(c)) loadMarket(); const kc = ls.get("mm_kr", null); if (!kc || mkNeedsFetch(kc)) loadKr(); const d = ls.get("mm_debt", null); if (!d || d.slot !== debtSlot()) loadDebt(); }, 60 * 1000);
+setInterval(() => { if (currentTab !== "morning") return; const c = ls.get("mm_market", null); if (!c || mkNeedsFetch(c)) loadMarket(); const kc = ls.get("mm_kr", null); if (!kc || !(kc.d && kc.d.markets) || mkNeedsFetch(kc)) loadKr(); const d = ls.get("mm_debt", null); if (!d || d.slot !== debtSlot()) loadDebt(); }, 60 * 1000);
 document.getElementById("refresh").addEventListener("click", refresh);
 refresh();
 /* ── 💰 매수 기록 입력 창 (실전/연습 · 기분) ── */
