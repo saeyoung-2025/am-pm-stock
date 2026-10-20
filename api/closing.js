@@ -101,6 +101,29 @@ async function multiQuote(codes, mkt, auth) {
   return out;
 }
 
+// ── 오늘 정규장(KRX) 공식 종가: 장 마감 뒤 현재가 칸은 시간외 거래로 바뀔 수 있어서, 일봉의 오늘 종가를 씀 ──
+//    15:31 이후 값은 하루 동안 Redis에 보관 (한 번만 조회)
+async function krxClose(code, auth) {
+  const k = kstNow(), key = `amp:close:${k.ymd}:${code}`;
+  try { const c = await redis("GET", key); if (c) return JSON.parse(c); } catch (e) {}
+  const from = new Date(Date.now() + 9 * 3600e3 - 14 * 86400e3).toISOString().slice(0, 10).replace(/-/g, "");
+  const d = await kis("/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice", "FHKST03010100",
+    { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: code, FID_INPUT_DATE_1: from, FID_INPUT_DATE_2: k.ymd, FID_PERIOD_DIV_CODE: "D", FID_ORG_ADJ_PRC: "0" }, auth);
+  const rows = (d.output2 || []).filter(x => x.stck_bsop_date && num(x.stck_clpr)).sort((a, b) => b.stck_bsop_date.localeCompare(a.stck_bsop_date));
+  if (!rows.length || rows[0].stck_bsop_date !== k.ymd) return null;     // 오늘 거래 없음(휴장 등)
+  const out = { close: num(rows[0].stck_clpr), prev: rows[1] ? num(rows[1].stck_clpr) : null, vol: num(rows[0].acml_vol) };
+  if (k.min >= 931) { try { await redis("SET", key, JSON.stringify(out), "EX", 86400); } catch (e) {} }
+  return out;
+}
+
+// 여러 종목 종가를 3개씩 동시에 (처음 한 번만 느리고, 그다음은 Redis에서 바로)
+async function krxCloses(codes, auth) {
+  const res = {}, q = [...codes];
+  const w = async () => { while (q.length) { const c = q.shift(); try { const kc = await krxClose(c, auth); if (kc && kc.close) res[c] = kc; } catch (e) {} await sleep(80); } };
+  await Promise.all([w(), w(), w()]);
+  return res;
+}
+
 // ── VKOSPI: 코드가 공개 문서에 없어서, KIS가 배포하는 지수 목록 파일에서 '변동성' 이름으로 찾음 ──
 const zlib = require("zlib");
 // zip 첫 파일 풀기 (끝의 '중앙 디렉터리'에서 크기·위치를 읽어 안전하게)
@@ -503,7 +526,8 @@ module.exports = async (req, res) => {
       if (qv("after") === "1") {
         try {
           const big = UNIVERSE.map(x => x[0]).filter(c => !["247540","086520","196170","028300"].includes(c)).slice(0, 30);
-          const krx = await multiQuote(big, "J", auth); await sleep(150);
+          const names = Object.fromEntries(UNIVERSE), krx = {};
+          Object.entries(await krxCloses(big, auth)).forEach(([c, kc]) => krx[c] = { price: kc.close, name: names[c] });
           const nx = await multiQuote(big, "NX", auth);
           const moves = big.filter(c => krx[c] && nx[c] && nx[c].vol > 0).map(c => ({ code: c, name: krx[c].name, ch: +(((nx[c].price / krx[c].price) - 1) * 100).toFixed(2) }));
           if (moves.length >= 5) {
@@ -628,6 +652,12 @@ module.exports = async (req, res) => {
       await Promise.all([worker(), worker()]);
       let after = null;
       if (qv("after") === "1") {
+        // 위 가격은 '오늘 정규장 종가'로 고정 (장 마감 뒤 현재가 칸이 시간외 가격으로 움직이는 문제)
+        const cl = await krxCloses(codes.filter(c => out[c]), auth);
+        Object.entries(cl).forEach(([c, kc]) => {
+          out[c].price = kc.close; out[c].closeFixed = true;
+          const pv = kc.prev || out[c].prev; if (pv) out[c].change = +(((kc.close / pv) - 1) * 100).toFixed(2);
+        });
         try {
           const nx = await multiQuote(codes, "NX", auth);
           after = {};
