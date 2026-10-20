@@ -504,11 +504,13 @@ module.exports = async (req, res) => {
         try {
           const d = await kis("/uapi/domestic-futureoption/v1/quotations/display-board-futures", "FHPIF05030200",
             { FID_COND_MRKT_DIV_CODE: "F", FID_COND_SCR_DIV_CODE: "20503", FID_COND_MRKT_CLS_CODE: "" }, auth);
-          const list = (Array.isArray(d.output) ? d.output : []).filter(x => /^1\d{2}[0-9A-Z]{3}$/.test(x.futs_shrn_iscd || "") && x.futs_shrn_iscd.startsWith("101"))
-            .map(x => ({ code: x.futs_shrn_iscd, name: x.hts_kor_isnm, rmnn: num(x.hts_rmnn_dynu) })).filter(x => x.rmnn != null && x.rmnn >= 0)
-            .sort((a, b) => a.rmnn - b.rmnn);
+          const rows = Array.isArray(d.output) ? d.output : Array.isArray(d.output1) ? d.output1 : d.output ? [d.output] : [];
+          // 코드 모양은 거래소 체계에 따라 다를 수 있어서(101X12 / A016C… 등) 이름으로 고름: 스프레드(SP)·미니·위클리 제외, 가격 있는 것
+          const list = rows.map(x => ({ code: x.futs_shrn_iscd || x.shrn_iscd || x.stck_shrn_iscd, name: x.hts_kor_isnm || "", rmnn: num(x.hts_rmnn_dynu), price: num(x.futs_prpr) }))
+            .filter(x => x.code && x.price && !/SP|스프레드|미니|위클리|MINI/i.test(x.name))
+            .sort((a, b) => (a.rmnn ?? 9999) - (b.rmnn ?? 9999));
           if (list[0]) ({ code, name, rmnn } = list[0]);
-          else out.listErr = "전광판에 코스피200 선물이 없음";
+          else out.listErr = `전광판에서 못 고름 (받은 ${rows.length}줄${rows[0] ? ` · 예: ${String(rows[0].futs_shrn_iscd || Object.keys(rows[0]).slice(0,3).join("/")).slice(0,20)} ${String(rows[0].hts_kor_isnm || "").slice(0,14)}` : ""})`;
         } catch (e) { out.listErr = String(e.message || e).slice(0, 60); }
         // 예비: 전광판이 안 되면 코드를 직접 만들어 시도 (101 + 연도 글자 + 월). 2025=W 기준(U는 건너뜀 → 2026=X)
         if (!code) {
@@ -522,6 +524,7 @@ module.exports = async (req, res) => {
             try {
               const d = await kis("/uapi/domestic-futureoption/v1/quotations/inquire-price", "FHMIF10000000", { FID_COND_MRKT_DIV_CODE: "F", FID_INPUT_ISCD: cand }, auth);
               if (d.output1 && num(d.output1.futs_prpr)) { code = cand; name = d.output1.hts_kor_isnm || `F ${qy}${String(qm).padStart(2,"0")}`; rmnn = num(d.output1.hts_rmnn_dynu); out.guessed = true; }
+              else out.guessErr = cand + ": 가격 없음";
             } catch (e) { out.guessErr = cand + ": " + String(e.message || e).slice(0, 40); }
           }
         }
