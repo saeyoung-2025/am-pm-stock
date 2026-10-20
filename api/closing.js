@@ -497,7 +497,24 @@ module.exports = async (req, res) => {
       const kospi = await one("KSP", "0001", "코스피");
       await sleep(120);
       const kosdaq = await one("KSQ", "1001", "코스닥");
-      return res.status(200).json({ status: "ok", at: Date.now(), markets: [kospi, kosdaq] });
+      // 🌙 애프터마켓(15:40~20:00) 체감: 지수는 장 마감 뒤 계산되지 않으므로, 코스피 대형주 30개의
+      //    NXT(넥스트레이드) 가격이 오늘 종가보다 평균 몇 % 움직였는지로 분위기만 추정 (공식 지수 아님)
+      let after = null;
+      if (qv("after") === "1") {
+        try {
+          const big = UNIVERSE.map(x => x[0]).filter(c => !["247540","086520","196170","028300"].includes(c)).slice(0, 30);
+          const krx = await multiQuote(big, "J", auth); await sleep(150);
+          const nx = await multiQuote(big, "NX", auth);
+          const moves = big.filter(c => krx[c] && nx[c] && nx[c].vol > 0).map(c => ({ code: c, name: krx[c].name, ch: +(((nx[c].price / krx[c].price) - 1) * 100).toFixed(2) }));
+          if (moves.length >= 5) {
+            const avgCh = moves.reduce((t, m) => t + m.ch, 0) / moves.length;
+            const sorted = [...moves].sort((a, b) => b.ch - a.ch);
+            after = { n: moves.length, avg: +avgCh.toFixed(2), up: moves.filter(m => m.ch > 0).length, down: moves.filter(m => m.ch < 0).length,
+              best: sorted.slice(0, 2), worst: sorted.slice(-2).reverse() };
+          } else after = { n: moves.length, error: "애프터 거래가 아직 적어요" };
+        } catch (e) { after = { error: String(e.message || e).slice(0, 60) }; }
+      }
+      return res.status(200).json({ status: "ok", at: Date.now(), markets: [kospi, kosdaq], after });
     }
 
     // ⭐ 아침 계기판 '한국 시장 체온': /api/closing?market=1
@@ -616,7 +633,7 @@ module.exports = async (req, res) => {
           after = {};
           Object.entries(nx).forEach(([c, q]) => {
             const krx = out[c] && out[c].price;
-            after[c] = { price: q.price, vsClose: krx ? +(((q.price / krx) - 1) * 100).toFixed(2) : null };
+            after[c] = { price: q.price, vsClose: krx ? +(((q.price / krx) - 1) * 100).toFixed(2) : null, vol: q.vol, amount: q.amount };
           });
         } catch (e) { errs["애프터마켓: " + String(e.message).slice(0, 40)] = 1; }
       }
