@@ -410,6 +410,16 @@
   .pxsum b.none{font-family:inherit;font-weight:400;font-size:12px;color:var(--faint)}
   .pxsum em{display:block;font-style:normal;font-size:10.5px;font-weight:600;white-space:nowrap}
   .pxsum span{white-space:nowrap} .pxsum > div{min-width:0;overflow:hidden}
+  .grid.three{grid-template-columns:repeat(3,1fr)}
+  @media (max-width:480px){ .grid.three{grid-template-columns:1fr 1fr} .grid.three .fut-mini{grid-column:1 / -1;height:auto;min-height:84px} }
+  .fut-mini{padding:2px 4px 6px} .fut-mini .tag .tip{transform:scale(.85);margin-right:2px} .fut-mini .tag .live{font-style:normal;color:#2f855a}
+  .fut-mini p{margin:0;padding:0 8px}
+  .fm-v{margin-top:6px !important} .fm-v b{font-family:Nunito,sans-serif;font-weight:800;font-size:17px} .fm-v span{font-family:Nunito,sans-serif;font-weight:700;font-size:12px}
+  .fm-o{font-size:10.5px;color:var(--sub);margin-top:1px !important;white-space:nowrap} .fm-o span{font-weight:700}
+  .fm-v{white-space:nowrap}
+  .fm-w{font-size:10.5px;color:#6b46c1;margin-top:4px !important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .fm-w.hot{color:#b83228;font-weight:700}
+  .fm-w .tip{transform:scale(.8)}
+  .fm-none{font-size:12px;color:var(--faint);margin-top:8px !important} .fm-none small{display:block;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .fut-row{display:grid;grid-template-columns:78px auto 1fr auto;align-items:baseline;gap:8px;padding:6px 8px;border-radius:10px;margin-top:4px}
   .fut-row.on{background:#f3f6fc}
   .fut-row .lab{font-size:13px} .fut-row .lab small{display:block;font-size:10px;color:var(--faint)}
@@ -654,12 +664,12 @@ const BOARD = [
     { name:"S&P500 선물", note:"24시간 · CFD 대용", sym:"OANDA:SPX500USD" },
     { name:"나스닥100 선물", note:"24시간 · CFD 대용", sym:"OANDA:NAS100USD" },
   ]},
-  { tip:"s_kr", title:"🐯 한국 관련", items:[
+  { tip:"s_kr", title:"🐯 한국 관련", three:true, items:[
+    { fut:true },
     { name:"EWY",     note:"ETF · 약 15분 지연", sym:"AMEX:EWY" },
     { name:"USD/KRW", note:"환율",              sym:"FX_IDC:USDKRW" },
     { msci:true },
     { vkospi:true },
-    { fut:true },
     { krmkt:true },
   ]},
   { tip:"s_etc", title:"🌎 원자재 · 기타 지표", items:[
@@ -971,25 +981,27 @@ const futSession = () => { const p = kstParts(), t = p.h * 60 + p.mi, wd = p.wd;
   return null; };
 function futNeedsFetch(c){ if (!c || !c.d || !c.d.code) return true; if (futSession()) return Date.now() - c.at >= 10 * 60e3; return Date.now() - c.at > 6 * 3600e3; }
 function futHTML(){
-  const e = expiryInfo();
-  const head = `<div class="kr-head">${tipHTML("m_fut")}<b>📈 코스피200 선물</b><em>${FUT && FUT.name ? esc(FUT.name) : "가장 가까운 달"} · 다음 네 마녀의 날 ${e.nextQuad} (D-${e.dLeft})</em></div>`;
-  if (!FUT) return head + `<p class="kr-none">불러오는 중…</p>` + witchLine();
-  if (!FUT.code) return head + `<p class="kr-none">데이터 없음 <small>(${esc(FUT.listErr || FUT.guessErr || "종목을 못 찾음")})</small></p>` + witchLine();
-  const row = (lab, sub, q, err, on) => {
-    if (!q) return `<div class="fut-row"><span class="lab">${lab}<small>${sub}</small></span><span class="kr-none">데이터 없음${err ? ` <small>(${esc(err)})</small>` : ""}</span></div>`;
-    const cls = q.change == null ? "" : q.change > 0 ? "up" : q.change < 0 ? "down" : "";
-    return `<div class="fut-row ${on ? "on" : ""}"><span class="lab">${lab}<small>${sub}</small></span>
-      <b class="v">${q.price.toFixed(2)}</b><span class="${cls}">${q.diff != null ? (q.diff > 0 ? "▲" : q.diff < 0 ? "▼" : "") + Math.abs(q.diff).toFixed(2) : ""} ${q.change != null ? pct(q.change) : ""}</span>
-      ${on ? `<em class="live">● 거래 중</em>` : ""}</div>`;
-  };
-  const ses = futSession();
-  // 야간 값이 주간과 완전히 같으면(거래량·가격) 야간 시세가 아니라고 보고 표시 안 함
+  const e = expiryInfo(), ses = futSession();
+  const tag = lab => `<span class="tag">${tipHTML("m_fut")}K200 선물${lab ? " · " + lab : ""}</span>`;
+  const wline = e.today === "quad" ? `<p class="fm-w hot">${tipHTML("witch")}🧙 오늘 네 마녀의 날 · 막판 주의</p>`
+    : e.tomorrow === "quad" ? `<p class="fm-w">${tipHTML("witch")}🧙 내일 네 마녀의 날</p>`
+    : e.today === "opt" ? `<p class="fm-w">${tipHTML("witch")}🗓 오늘 옵션 만기</p>`
+    : `<p class="fm-w">${tipHTML("witch")}🧙 만기 ${e.nextQuad} D-${e.dLeft}</p>`;
+  if (!FUT) return tag("") + `<p class="fm-none">불러오는 중…</p>` + wline;
+  if (!FUT.code) { const why = [FUT.listErr, FUT.guessErr].filter(Boolean).join(" / ") || "종목을 못 찾음";
+    return tag("") + `<p class="fm-none" title="${esc(why)}">데이터 없음<small>${esc(why)}</small></p>` + wline; }
+  // 야간 값이 주간과 완전히 같으면(가격·거래량) 야간 시세가 아니라고 봄
   const n = FUT.night && FUT.day && FUT.night.price === FUT.day.price && FUT.night.vol === FUT.day.vol ? null : FUT.night;
-  return head + row("☀️ 주간", "08:45~15:45", FUT.day, FUT.dayErr, ses === "day")
-    + row("🌙 야간", "18:00~05:00", n, n ? null : (FUT.nightErr || (FUT.night ? "주간과 같은 값 — 야간 시세 아님" : "")), ses === "night")
-    + (FUT.day && FUT.day.k200 ? `<p class="fut-note">${tipHTML("m_basis")}코스피200 지수 ${FUT.day.k200.toFixed(2)} · 선물과 차이 ${(FUT.day.price - FUT.day.k200 >= 0 ? "+" : "") + (FUT.day.price - FUT.day.k200).toFixed(2)}</p>` : "")
-    + witchLine()
-    + `<p class="upd">${tipHTML("u_fut")}🕒 ${futAt ? hhmm(futAt) + " 받음" : "아직 안 받음"} · ${ses ? "거래 중 · 10분마다 자동" : "거래 시간 아님 · 마지막 값"}</p>`;
+  const useNight = n && (ses === "night" || (!ses && kstParts().h < 9));   // 밤·새벽엔 야간 값이 '지금'
+  const main = useNight ? n : FUT.day, other = useNight ? FUT.day : n;
+  if (!main) return tag("") + `<p class="fm-none">데이터 없음<small>${esc(FUT.dayErr || "")}</small></p>` + wline;
+  const cls = q => q.change == null ? "" : q.change > 0 ? "up" : q.change < 0 ? "down" : "";
+  const live = ses && ((ses === "night") === !!useNight) ? ` <i class="live">●</i>` : "";
+  return tag((useNight ? "🌙 야간" : "☀️ 주간") + live)
+    + `<p class="fm-v"><b>${main.price.toFixed(2)}</b> <span class="${cls(main)}">${main.change != null ? pct(main.change) : ""}</span></p>`
+    + `<p class="fm-o">${other ? `${useNight ? "주간" : "야간"} <span class="${cls(other)}">${other.change != null ? pct(other.change) : other.price.toFixed(2)}</span>`
+        : `${useNight ? "주간" : "야간"} <span title="${esc(FUT.nightErr || "")}">–</span>`}</p>`
+    + wline;
 }
 async function loadFut(){
   if (location.protocol === "file:") return;
@@ -1058,11 +1070,11 @@ function renderBoard(){
     const s = document.createElement("section");
     s.innerHTML = `<h2>${tipHTML(sec.tip)}${sec.title}</h2>${sec.links ? `<p class="sec-links">${sec.links.map(([t, u]) => `<a href="${u}" target="_blank" rel="noopener">${t}</a>`).join("")}</p>` : ""}`;
     const card = document.createElement("div");
-    card.className = "grid";
+    card.className = "grid" + (sec.three ? " three" : "");
     sec.items.forEach(it => {
       if (it.msci){ card.appendChild(msciRow()); return; }
       if (it.vkospi){ const v = document.createElement("div"); v.className = "card wide msci-card"; v.id = "vkCard"; v.innerHTML = vkHTML(); card.appendChild(v); return; }
-      if (it.fut){ const v = document.createElement("div"); v.className = "card wide kr-card fut-card"; v.id = "futCard"; v.innerHTML = futHTML(); card.appendChild(v); return; }
+      if (it.fut){ const v = document.createElement("div"); v.className = "mini fut-mini"; v.id = "futCard"; v.innerHTML = futHTML(); card.appendChild(v); return; }
       if (it.krmkt){ const v = document.createElement("div"); v.className = "card wide kr-card"; v.id = "krCard"; v.innerHTML = krHTML(); card.appendChild(v); return; }
       const box = document.createElement("div");
       box.className = "mini";
