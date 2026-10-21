@@ -414,9 +414,11 @@ module.exports = async (req, res) => {
       if (k.wd === 0 || k.wd === 6 || k.min < 540 || k.min > 935) return res.status(200).json({ status: "ok", skipped: "장 시간 아님" });
       // 🌪 시장 급변 알림 — 내 종목과 상관없이 시장 전체가 흔들릴 때 (각 신호 하루 한 번)
       const sentMk = [];
+      let kospiCh = null;   // 종목 알림에 '시장 탓인지, 종목 탓인지' 붙이려고 저장
       try {
         const m = (await kis("/uapi/domestic-stock/v1/quotations/inquire-index-price", "FHPUP02100000", { FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: "0001" }, auth)).output;
         const kc = num(m.bstp_nmix_prdy_ctrt), kv = num(m.bstp_nmix_prpr);
+        kospiCh = kc;
         let vk = null; try { vk = await getVkospi(auth); } catch (e) {}
         const mk = [];
         if (kc != null && kc <= -3) mk.push(["kospi3", `🌪 코스피 ${kc.toFixed(2)}% 급락`, `코스피 ${kv ? kv.toLocaleString() : ""} (${kc.toFixed(2)}%). 시장 전체가 크게 흔들리는 중이에요.\n보유 종목 손절선을 점검하고, 오늘 종가베팅은 쉬어가세요.`, 5]);
@@ -438,22 +440,32 @@ module.exports = async (req, res) => {
         await sleep(150);
       }
       const sent = [];
+      // 🩺 빠질 때 '왜?'의 첫 단서: 오늘 코스피와 비교 (시장 전체 탓 / 이 종목만 / 비슷)
+      const diag = ch => {
+        if (kospiCh == null || ch == null) return "";
+        const f = v => `${v > 0 ? "+" : ""}${v.toFixed(2)}%`, rel = ch - kospiCh;
+        if (kospiCh <= -1.5 && rel > -2) return `\n🩺 오늘 코스피 ${f(kospiCh)} · 이 종목 ${f(ch)} → 시장 전체 하락 영향이 커요. 시장이 회복되면 같이 돌아오는 경우가 많아요.`;
+        if (rel <= -3) return `\n🩺 오늘 코스피 ${f(kospiCh)}인데 이 종목만 ${f(ch)} → 종목 자체에 일이 있을 수 있어요. 📋 공시·📰 뉴스 확인 (누르면 뉴스로).`;
+        return `\n🩺 오늘 코스피 ${f(kospiCh)} · 이 종목 ${f(ch)} → 시장과 비슷하게 움직이는 중.`;
+      };
       for (const w of list) {
         const x = q[w.code]; if (!x || !x.price) continue;
         const hits = [];
         if (w.buy) {
           const my = (x.price / w.buy - 1) * 100;
-          if (my <= w.stop) hits.push(["stop", `🚨 손절선 ${w.stop}% 도달`, `지금 ${x.price.toLocaleString()}원 · 내 수익률 ${my.toFixed(1)}%\n'지금 이 가격에 새로 사겠나?' 아니라면 정리할 때예요.`, 5]);
-          else if (my <= w.stop / 2) hits.push(["warn", `⚠️ 손절선 절반`, `지금 ${x.price.toLocaleString()}원 · 내 수익률 ${my.toFixed(1)}%\n왜 빠지는지 뉴스·공시를 확인해 두세요.`, 4]);
+          if (my <= w.stop) hits.push(["stop", `🚨 손절선 ${w.stop}% 도달`, `지금 ${x.price.toLocaleString()}원 · 내 수익률 ${my.toFixed(1)}%\n'지금 이 가격에 새로 사겠나?' 아니라면 정리할 때예요.${diag(x.change)}`, 5]);
+          else if (my <= w.stop / 2) hits.push(["warn", `⚠️ 손절선 절반`, `지금 ${x.price.toLocaleString()}원 · 내 수익률 ${my.toFixed(1)}%\n아직 괜찮아요. 이유만 한번 확인해 두세요.${diag(x.change)}`, 4]);
           if (my >= w.take) hits.push(["take", `🎯 목표 +${w.take}% 도달`, `지금 ${x.price.toLocaleString()}원 · 내 수익률 +${my.toFixed(1)}%\n전부 또는 절반 팔아 수익 지키기.`, 4]);
         }
         const ch = x.change;
         if (ch != null && Math.abs(ch) >= w.th && (w.dir === "both" || (w.dir === "up" && ch > 0) || (w.dir === "down" && ch < 0)))
-          hits.push(["th", `🔔 오늘 ${ch > 0 ? "+" : ""}${ch.toFixed(2)}%`, `지금 ${x.price.toLocaleString()}원 · 하루 기준 ${w.th}%를 넘었어요.`, 4]);
+          hits.push(["th", `🔔 오늘 ${ch > 0 ? "+" : ""}${ch.toFixed(2)}%`, `지금 ${x.price.toLocaleString()}원 · 하루 기준 ${w.th}%를 넘었어요.${ch < 0 ? diag(ch) : ""}`, 4]);
         for (const [kind, title, msg, pr] of hits) {
           const ok = await redis("SET", `amp:sent:${k.ymd}:${w.code}:${kind}`, "1", "NX", "EX", 90000);   // 같은 종목·같은 신호는 하루 한 번
           if (ok !== "OK") continue;
-          await ntfy(`${w.paper && kind !== "th" ? "🧪 연습 · " : ""}${w.name} · ${title}`, msg, { priority: w.paper && kind !== "th" ? Math.min(pr, 4) : pr, kind, click: `https://m.stock.naver.com/domestic/stock/${w.code}/total` });
+          // 빠지는 알림은 누르면 그 종목 뉴스 화면으로 (왜 빠지는지 바로 보게)
+          const down = kind === "stop" || kind === "warn" || (kind === "th" && x.change < 0);
+          await ntfy(`${w.paper && kind !== "th" ? "🧪 연습 · " : ""}${w.name} · ${title}`, msg, { priority: w.paper && kind !== "th" ? Math.min(pr, 4) : pr, kind, click: `https://m.stock.naver.com/domestic/stock/${w.code}/${down ? "news" : "total"}` });
           sent.push(`${w.name}:${kind}`);
         }
       }
