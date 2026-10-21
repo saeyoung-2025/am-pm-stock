@@ -433,6 +433,13 @@
   .fut-card .upd{font-size:11.5px;color:var(--faint);margin:6px 0 0}
   .sec-links{display:flex;gap:6px;flex-wrap:wrap;margin:-4px 0 8px}
   .sec-links a{padding:3px 10px;border-radius:99px;background:var(--chip);color:var(--accent);text-decoration:none;font-size:11.5px;font-weight:600}
+  .fl-row{display:grid;grid-template-columns:42px 1fr;gap:2px 6px;align-items:center;margin-top:4px}
+  .fl-row .who{font-size:12.5px;color:var(--sub)}
+  .fl-bars{display:flex;gap:2px;height:46px;background:linear-gradient(transparent calc(50% - .5px),#c5cedd calc(50% - .5px),#c5cedd calc(50% + .5px),transparent calc(50% + .5px));border-radius:4px}
+  .fl-bars i{flex:1;position:relative;min-width:3px}
+  .fl-bars b{position:absolute;left:0;right:0;border-radius:2px} .fl-bars b.up{background:#f0a59c} .fl-bars b.down{background:#8fb0ec}
+  .fl-sum{grid-column:2;margin:0;font-size:11px;color:var(--sub)} .fl-sum b{font-family:Nunito,sans-serif}
+  .fl-dates{display:flex;justify-content:space-between;margin:0 0 0 48px;font-size:10px;color:var(--faint)}
   .kr-news{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);font-size:13px}
   .kr-news b{margin-right:4px}
   .kr-news a{padding:4px 11px;border-radius:99px;background:var(--chip);color:var(--accent);text-decoration:none;font-size:12px;font-weight:600}
@@ -1038,13 +1045,13 @@ function krHTML(){
         return `<div class="kr-row"><span class="who">${x.label}</span>
           <span class="bar"><i class="${pos ? "up" : "down"}" style="${pos ? "left:50%" : `left:${50 - w}%`};width:${Math.max(w, x.net ? 0.8 : 0)}%"></i><em></em></span>
           <span class="net ${pos ? "up" : "down"}">${sgnEok(x.net)}</span>
-          <small class="bs">매수 ${eokTxt(x.buy)} · 매도 ${eokTxt(x.sell)}</small></div>`; }).join("")}</div>`
+          <small class="bs">매수 ${eokTxt(x.buy)} · 매도 ${eokTxt(x.sell)}${x.buy && x.sell ? ` · ${tipHTML("m_ratio")}<b class="${x.buy / x.sell >= 1.05 ? "up" : x.buy / x.sell <= 0.95 ? "down" : ""}">${(x.buy / x.sell).toFixed(2)}배</b>` : ""}</small></div>`; }).join("")}</div>`
       : `<p class="kr-none" style="font-size:12px">투자자별 금액: 데이터 없음${m.invErr ? ` <small>(${esc(m.invErr)})</small>` : ""}</p>`;
     return `<div class="kr-mkt">
       <div class="kr-top"><b>${m.name}</b><span class="v">${m.value != null ? m.value.toLocaleString(undefined, { minimumFractionDigits:2, maximumFractionDigits:2 }) : "–"}</span>
         <span class="${cls}">${m.diff != null ? (m.diff > 0 ? "▲" : m.diff < 0 ? "▼" : "") + Math.abs(m.diff).toFixed(2) : ""} ${m.change != null ? pct(m.change) : ""}</span></div>
       <div class="kr-sub">${tipHTML("m_kamt")}거래대금 ${eokTxt(m.amount)}${breadth}</div>
-      <p class="kr-lab">${tipHTML("m_inv")}투자자별 순매수 <small>(빨강 = 산 쪽이 많음 · 파랑 = 판 쪽이 많음)</small></p>${inv}</div>`;
+      <p class="kr-lab">${tipHTML("m_inv")}투자자별 순매수 <small>(빨강 = 산 쪽이 많음 · 파랑 = 판 쪽이 많음)</small></p>${inv}${m.code === "0001" ? flowHTML() : ""}</div>`;
   };
   const af = KR.after;
   const afterBox = !af ? "" : af.error ? `<div class="kr-after">${tipHTML("m_kafter")}<b>🌙 애프터마켓 체감</b> <span class="kr-none">${esc(af.error)}</span></div>`
@@ -1055,6 +1062,34 @@ function krHTML(){
 }
 // 장중 10분마다 + 애프터마켓(15:40~20:05)에도 10분마다 (투자자 금액도 저녁에 확정값에 가까워짐)
 function krNeedsFetch(c){ if (afterHours()) return Date.now() - c.at >= 10 * 60 * 1000; return mkNeedsFetch(c); }
+/* 📊 외국인·기관 최근 20거래일 순매수 (코스피) — 하루 두 번(아침·16시 이후)만 새로 받음 */
+let FLOW = null;
+function flowHTML(){
+  const lab = `<p class="kr-lab" style="margin-top:12px">${tipHTML("m_flow20")}📊 최근 20일 흐름 <small>(코스피 · 하루 단위 순매수)</small></p>`;
+  if (!FLOW) return lab + `<p class="kr-none" style="font-size:12px">불러오는 중…</p>`;
+  const d = (FLOW.days || []).slice(0, 20).reverse();
+  if (d.length < 3) return lab + `<p class="kr-none" style="font-size:12px">아직 기록이 모자라요 (${d.length}일)${FLOW.error ? ` <small>(${esc(FLOW.error)})</small>` : ""}</p>`;
+  const row = (key, name) => {
+    const vals = d.map(x => x[key]).filter(v => v != null);
+    const max = Math.max(...vals.map(Math.abs), 1);
+    let streak = 0; const last = d[d.length - 1][key];
+    if (last) for (let i = d.length - 1; i >= 0 && d[i][key] != null && Math.sign(d[i][key]) === Math.sign(last); i--) streak++;
+    const sum = vals.reduce((t, v) => t + v, 0), s5 = d.slice(-5).map(x => x[key] || 0).reduce((t, v) => t + v, 0);
+    const bars = d.map(x => { const v = x[key]; if (v == null) return `<i></i>`; const h = Math.max(1.5, Math.abs(v) / max * 22);
+      return `<i title="${+x.date.slice(4,6)}/${+x.date.slice(6)} ${sgnEok(v)}"><b class="${v >= 0 ? "up" : "down"}" style="height:${h}px;${v >= 0 ? "bottom:50%" : "top:50%"}"></b></i>`; }).join("");
+    return `<div class="fl-row"><span class="who">${name}</span><div class="fl-bars">${bars}</div>
+      <p class="fl-sum">20일 <b class="${sum >= 0 ? "up" : "down"}">${sgnEok(sum)}</b> · 최근 5일 <b class="${s5 >= 0 ? "up" : "down"}">${sgnEok(s5)}</b>${streak >= 2 ? ` · <b class="${last >= 0 ? "up" : "down"}">${streak}일 연속 ${last >= 0 ? "매수" : "매도"}</b>` : ""}</p></div>`;
+  };
+  const md2 = x => `${+x.date.slice(4,6)}/${+x.date.slice(6)}`;
+  return lab + row("f", "외국인") + row("o", "기관") + `<p class="fl-dates"><span>${md2(d[0])}</span><span>${md2(d[d.length - 1])}</span></p>`;
+}
+async function loadFlow(){
+  if (location.protocol === "file:") return;
+  const c = ls.get("mm_flow", null), p = kstParts(), slot = todayKey() + (p.h >= 16 ? "pm" : "am");
+  if (c && c.slot === slot && c.d && (c.d.days || []).length) FLOW = c.d;
+  else { try { const j = await api("flow=1"); if (j && j.status === "ok" && Array.isArray(j.days)) { FLOW = j; if (j.days.length) ls.set("mm_flow", { slot, d: j }); } else FLOW = c ? c.d : { days: [], error: "서버가 아직 옛 버전이에요" }; } catch(e) { FLOW = c ? c.d : { days: [], error: "서버 연결 실패" }; } }
+  const el = document.getElementById("krCard"); if (el) el.innerHTML = krHTML();
+}
 async function loadKr(){
   if (location.protocol === "file:") return;
   let c = ls.get("mm_kr", null);
@@ -1174,7 +1209,7 @@ async function loadMemo(){
   renderNote();
 }
 
-function refresh(){ renderHeader(); renderBoard(); renderNote(); document.getElementById("mkTemp").innerHTML = mkHTML(); document.getElementById("debtBox").innerHTML = debtHTML(); renderEco(); setTimeout(loadMarket, 300); setTimeout(loadKr, 600); setTimeout(loadFut, 750); setTimeout(loadDebt, 900); setTimeout(loadMemo, 1500); }
+function refresh(){ renderHeader(); renderBoard(); renderNote(); document.getElementById("mkTemp").innerHTML = mkHTML(); document.getElementById("debtBox").innerHTML = debtHTML(); renderEco(); setTimeout(loadMarket, 300); setTimeout(loadKr, 600); setTimeout(loadFut, 750); setTimeout(loadFlow, 1200); setTimeout(loadDebt, 900); setTimeout(loadMemo, 1500); }
 
 /* ── 탭 ── */
 let currentTab = "morning";
@@ -1310,6 +1345,14 @@ function stage0(j){
     const big = MEMO.events.filter(e => { const t = Date.parse(e.date); return t > nowT && t - nowT < 20 * 3600e3 && /CPI|Federal Funds|FOMC Statement|Non-Farm/i.test(e.title); });
     add("s0_event", big.length > 0, "오늘 밤 큰 발표", big.length ? [...new Set(big.map(e => evKo(e.title).name))].join(", ") : "없음");
   }
+  // 💰 오늘 수급 (코스피): 매수÷매도 비율. 외국인·기관이 같이 0.9배 이하(= 둘 다 판 쪽이 확실히 많음)면 ⚠️
+  { const ksp = KR && (KR.markets || []).find(m => m.code === "0001"), inv = ksp && ksp.investors;
+    const rt = who => { const x = inv && inv.find(v => v.label === who); return x && x.buy && x.sell ? x.buy / x.sell : null; };
+    const f = rt("외국인"), o = rt("기관");
+    if (f != null && o != null) {
+      const t = (n, v) => `${n} ${v.toFixed(2)}배 ${v >= 1.05 ? "매수" : v <= 0.95 ? "매도" : "비슷"}`;
+      add("s0_flow", f <= 0.9 && o <= 0.9, "오늘 수급 (코스피)", `${t("외국인", f)} · ${t("기관", o)}`);
+    } }
   { const e = expiryInfo(); add("s0_witch", e.today === "quad", "만기일", e.today === "quad" ? "🧙 오늘 네 마녀의 날" : e.today === "opt" ? "옵션 만기일 (조금 주의)" : "아님"); }
   const bad = c.filter(x => x.bad).length;
   const kospiStop = k != null && k <= r.marketStop;
@@ -1437,6 +1480,7 @@ async function loadClosing(){
   const c = j.candidates || [];
   // 아침 계기판 자료가 아직 없으면 먼저 받아 두기 (각자 규칙대로 — 때가 안 됐으면 저장된 값 사용)
   if (!MK) await loadMarket(); if (!DEBT) await loadDebt(); if (!MEMO) await loadMemo();
+  { const kc = ls.get("mm_kr", null); if (!KR || !kc || krNeedsFetch(kc)) await loadKr(); }   // 오늘 수급(투자자별)
   const s0 = stage0(j);
   saveTrail(c); recordCandidates(c, s0); renderCbTime(); if (typeof schedulePushSync === "function" && PUSH && PUSH.store) schedulePushSync();
   let html = "";
@@ -1498,12 +1542,18 @@ setInterval(fillResults, 10 * 60 * 1000);
 const HOLD_DEF = { stop: -7, take: 10 };
 /* 📌 업데이트 기록 — 새로 바꿀 때마다 맨 위에 추가 */
 const UPDATE_LOG = [
+  { date:"2026.10.21", tab:"closing", items:[
+    ["0단계에 '오늘 수급' 추가", "외국인·기관이 요즘 장을 좌우해서. 코스피 외국인·기관의 매수÷매도 비율을 보여 주고, 둘 다 0.9배 이하(같이 파는 날)면 ⚠️ 하나로 셈."],
+    ["0단계에 '만기일' 추가", "네 마녀의 날(3·6·9·12월 둘째 목요일)엔 장 막판 프로그램 매매로 종가가 출렁여서. 그날이면 ⚠️ 하나로 셈 (매달 옵션 만기는 표시만)."],
+  ]},
   { date:"2026.10.20", tab:"morning", items:[
     ["장 마감 뒤 종가 고정", "장 마감 뒤에 위 가격이 시간외 거래 때문에 움직여서 애프터 가격과 늘 똑같이(0.00%) 보이던 문제. 이제 위 가격은 오늘 공식 종가(일봉)로 고정하고, 애프터는 그 종가와 비교해요."],
     ["🌙 애프터마켓 체감", "장 마감 뒤에는 지수가 멈춰 있어서. 15:40~20:00에는 한국장 카드에 코스피 대형주 30개의 NXT 애프터 가격으로 '종가 대비 평균 %·오른/내린 수'를 추정해 보여 줘요 (공식 지수 아님). 투자자 금액도 저녁까지 10분마다 다시 받아 확정값에 가까워져요."],
     ["📰 금융 뉴스 바로가기", "매일 아침 한국 금융 뉴스를 쉽게 보려고. 한국장 카드 아래에 네이버 주요 뉴스·시황·전망, 다음 금융 뉴스 링크."],
     ["📟 필라델피아 반도체 (SOXX)", "삼성전자·SK하이닉스 비중이 큰 한국장은 간밤 미국 반도체 흐름을 많이 따라가서. 미국장 코너에 필라델피아 반도체지수(SOX)를 따라가는 SOXX ETF 칸 추가 (SOX 지수 자체는 무료 위젯에서 막혀 있어 ETF로 대신). 미국장 코너도 데스크탑에서 3칸씩."],
     ["미국 선물 이름 정리", "'Nasdaq 24h'가 선물인 줄 알기 어려워서 '나스닥100 선물 (24시간 · CFD 대용)'으로. 진짜 CME 선물은 무료 위젯에 안 나와서, 거의 똑같이 움직이는 CFD를 씀. 진짜 선물은 인베스팅닷컴 바로가기 버튼으로."],
+    ["📊 외국인·기관 20일 흐름", "그들의 패턴을 알아 두려고. 한국장 카드 코스피 아래에 외국인·기관의 최근 20거래일 순매수 막대그래프, 20일·5일 합계, 연속 매수/매도 일수."],
+    ["💰 매수÷매도 비율 (수급 쏠림)", "외국인·기관이 요즘 장을 좌우해서. 한국장 카드 투자자별 줄에 '1.33배'처럼 산 금액÷판 금액을 붙이고, 저녁 계기판 0단계에 '오늘 수급' 항목 추가 (외국인·기관 둘 다 0.9배 이하면 ⚠️)."],
     ["📈 코스피200 선물 (주간·야간)", "아침 계기판에 꼭 있어야 할 지표가 빠져 있어서. 특히 야간선물(18:00~05:00)은 미국장 동안 거래돼 다음 날 코스피 시작 분위기를 미리 보여 줘요. 만기마다 바뀌는 종목은 앱이 매일 가장 가까운 달로 자동 선택."],
     ["🧙 네 마녀의 날 · 옵션 만기 표시", "만기일 장 막판엔 종가가 출렁여서. 선물 카드에 오늘/내일 만기 안내, 다음 네 마녀의 날까지 D-day. 저녁 계기판 0단계 점검에도 '만기일' 항목 추가."],
     ["🇰🇷 한국장 카드 (코스피·코스닥)", "한국 관련 코너에 정작 한국 지수가 없어서. VKOSPI 바로 아래에 코스피·코스닥 지수·등락·거래대금·오른/내린 종목 수, 그리고 개인·외국인·기관 순매수(억 원) 막대그래프. 장중 10분마다 갱신."],
@@ -2474,6 +2524,9 @@ async function loadPhone(){
 
 /* ── ? 메모 (마우스를 올리거나 누르면 설명) ── */
 const TIPS = {
+  m_flow20:["📊 최근 20일 흐름", "코스피에서 외국인·기관이 <b>하루하루</b> 얼마나 사고팔았는지(순매수, 억 원) 막대로 보여 줘요. 왼쪽이 오래된 날, 오른쪽이 최근.<br>• 빨강 막대(위): 산 날 · 파랑 막대(아래): 판 날 · 막대에 손가락/마우스를 대면 날짜와 금액<br>• <b>20일 합계 · 최근 5일 합계 · 며칠 연속 매수/매도</b>", "패턴 보는 법: 외국인이 며칠 연속 사다가 파랑으로 돌아서는 날, 또는 오래 팔다가 빨강이 이어지기 시작하는 날을 눈여겨보세요. 다만 거래소 분류상 '외국인'에는 해외 펀드를 통한 한국인 자금(이른바 검은머리 외국인)도 섞여 있어서 구분은 안 돼요. 자료: KIS 일별 투자자 매매 · 장 마감 뒤(16시 이후) 오늘 값 추가."],
+  m_ratio:["매수÷매도 비율 (몇 배)", "<b>산 금액 ÷ 판 금액</b>.<br><b>1배 = 산 돈과 판 돈이 똑같음</b> (저울이 딱 가운데).<br>• <b>1.33배</b>: 100억 팔 때 133억을 삼 → 사는 쪽<br>• <b>0.92배</b>: 100억 팔 때 92억만 삼 → 조금 파는 쪽<br>• <b>0.9배 이하</b>: 100억 팔 때 90억도 안 삼 → 확실히 파는 쪽<br><br>보는 기준: 1.0배 근처 = 큰 의미 없음 · 1.1배↑ 확실히 삼 · 1.2~1.3배↑ 강하게 삼 · 0.8배↓ 강하게 팖<br>색: 1.05배↑ 빨강 · 0.95배↓ 파랑", "순매수(억)는 '얼마나 많이'를, 비율은 '얼마나 한쪽으로 쏠렸나'를 보여 줘요. 거래가 많은 날은 순매수가 커도 비율은 1.1배일 수 있어요."],
+  s0_flow:["오늘 수급 (코스피)", "외국인·기관의 오늘 <b>매수÷매도 비율</b> (아침 계기판 한국장 카드와 같은 자료, 장중 잠정치).<br><b>1배</b> = 산 돈과 판 돈이 같음 · 1보다 크면 사는 쪽 · 작으면 파는 쪽.<br><br><b>⚠️ 언제 세나</b>: 외국인과 기관이 <b>둘 다 0.9배 이하</b>(둘 다 확실히 파는 날)일 때만 위험 신호 <b>1개</b>로 더해요. 한쪽만 팔면 참고만.<br><br><b>0단계 위험 신호 세는 법</b><br>• 0개 → ✅ 평소대로<br>• 1~2개 → ⚠️ 조심 (작게 사거나 더 골라서)<br>• 3개 이상 (또는 코스피 −1.5% 이하) → 🛑 오늘은 쉬기", "근거: 한국장은 외국인·기관 큰손이 방향을 좌우하는 경우가 많아요. 둘이 같이 팔면 종가 근처까지 매물이 이어져 다음 날 시초가도 약하기 쉬워요. 예) 외국인 1.33배·기관 0.92배 → 외국인이 사고 있으니 위험 신호 아님."],
   m_fut:["📈 코스피200 선물", "코스피200 지수를 미리 사고파는 계약. 현물 지수보다 먼저 움직여서 '시장이 어디로 갈지' 미리 보여 줘요.<br>• <b>☀️ 주간</b> 08:45~15:45<br>• <b>🌙 야간</b> 18:00~다음 날 05:00 — 미국장이 열려 있는 동안 거래돼서 <b>내일 아침 코스피 시작 분위기</b>를 미리 보여 줘요 (아침에 보면 제일 좋아요)<br>• 거래 중인 쪽에 ● 표시", "선물은 3·6·9·12월 둘째 목요일이 만기라 3개월마다 종목이 바뀌어요. 앱이 '남은 날이 가장 적은 달'을 매일 알아서 골라요. 자료: KIS. 거래 시간엔 10분마다 갱신."],
   m_basis:["선물과 지수 차이 (베이시스)", "선물 가격 − 코스피200 지수.", "보통 +면 '앞으로 오를 거라 보는 쪽'이 조금 더 많고, 크게 −면 비관적인 분위기. 만기가 다가올수록 0에 가까워져요."],
   witch:["🧙 만기일", "<b>매달 둘째 목요일</b> = 옵션 만기일. <b>3·6·9·12월 둘째 목요일</b> = 네 마녀의 날 (지수 선물·지수 옵션·개별주식 선물·개별주식 옵션 만기가 한꺼번에).", "이날은 큰손들이 계약을 정리하느라 <b>장 막판(15:20~15:30 동시호가)</b>에 프로그램 매매가 몰려 종가가 크게 흔들릴 수 있어요 → 종가베팅에 직접 영향. 그래서 저녁 계기판 0단계에도 넣었어요."],
