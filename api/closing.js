@@ -547,6 +547,44 @@ module.exports = async (req, res) => {
       return res.status(200).json(out);
     }
 
+    // 📊 외국인·기관 최근 20거래일 순매수 흐름 (코스피): /api/closing?flow=1
+    //    KIS 시장별 투자자매매동향(일별) FHPTJ04040000 · 받은 날짜별 값은 Redis(amp:flow:KSP)에 모아 두고(하루 한 번만 새로 조회) 최근 25일을 보냄
+    if (qv("flow")) {
+      const eok = v => { const n = num(v); if (n == null) return null; return Math.abs(n) > 5e7 ? +(n / 1e8).toFixed(1) : +(n / 100).toFixed(1); };
+      const k = kstNow(), hk = "amp:flow:KSP", fetchedKey = `amp:flowfetch:${k.ymd}:${k.min >= 960 ? "pm" : "am"}`;
+      let err = null, got = 0;
+      let need = true;
+      try { need = !(await redis("GET", fetchedKey)); } catch (e) {}
+      if (need) {
+        try {
+          const d = await kis("/uapi/domestic-stock/v1/quotations/inquire-investor-daily-by-market", "FHPTJ04040000",
+            { FID_COND_MRKT_DIV_CODE: "U", FID_INPUT_ISCD: "0001", FID_INPUT_DATE_1: k.ymd, FID_INPUT_ISCD_1: "KSP", FID_INPUT_DATE_2: k.ymd, FID_INPUT_ISCD_2: "0001" }, auth);
+          const rows = (Array.isArray(d.output) ? d.output : d.output ? [d.output] : []).filter(x => /^\d{8}$/.test(x.stck_bsop_date || ""));
+          const fields = [];
+          for (const x of rows) {
+            // 오늘 줄은 장 마감(15:40) 뒤에만 저장 (장중 값은 계속 바뀜)
+            if (x.stck_bsop_date === k.ymd && k.min < 940) continue;
+            let ch = num(x.bstp_nmix_prdy_ctrt); if (ch != null && ch > 0 && (x.prdy_vrss_sign === "4" || x.prdy_vrss_sign === "5")) ch = -ch;
+            const v = { f: eok(x.frgn_ntby_tr_pbmn), o: eok(x.orgn_ntby_tr_pbmn), p: eok(x.prsn_ntby_tr_pbmn), ch };
+            if (v.f == null && v.o == null) continue;
+            fields.push(x.stck_bsop_date, JSON.stringify(v));
+          }
+          if (fields.length) { try { await redis("HSET", hk, ...fields); got = fields.length / 2; } catch (e) { err = "저장 실패"; } }
+          if (!rows.length) err = "일별 자료가 비어 있음";
+          try { await redis("SET", fetchedKey, "1", "EX", 43200); } catch (e) {}
+        } catch (e) { err = String(e.message || e).slice(0, 60); }
+      }
+      let days = [];
+      try {
+        const all = await redis("HGETALL", hk);   // [date, json, date, json, ...]
+        const arr = Array.isArray(all) ? all : [];
+        for (let i = 0; i + 1 < arr.length; i += 2) { try { days.push({ date: arr[i], ...JSON.parse(arr[i + 1]) }); } catch (e) {} }
+        days.sort((a, b) => b.date.localeCompare(a.date));
+        days = days.slice(0, 25);
+      } catch (e) { err = err || "저장소(Redis) 읽기 실패"; }
+      return res.status(200).json({ status: "ok", days, got, error: err });
+    }
+
     // 🇰🇷 아침 계기판 '한국장': /api/closing?krmkt=1
     //    코스피·코스닥 지수(현재가·등락·거래대금·상승/하락 종목 수) + 투자자별(개인·외국인·기관) 매수·매도·순매수 금액
     //    투자자 금액: KIS 시장별 투자자매매동향(시세) FHPTJ04030000 — 장중 잠정치, 단위 백만원 → 억원으로 바꿔서 보냄
