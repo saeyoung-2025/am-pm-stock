@@ -440,16 +440,32 @@
   .fl-bars b{position:absolute;left:0;right:0;border-radius:2px} .fl-bars b.up{background:#f0a59c} .fl-bars b.down{background:#8fb0ec}
   .fl-sum{grid-column:2;margin:0;font-size:11px;color:var(--sub)} .fl-sum b{font-family:Nunito,sans-serif}
   .fl-dates{display:flex;justify-content:space-between;margin:0 0 0 48px;font-size:10px;color:var(--faint)}
-  .rules{display:flex;flex-wrap:wrap;gap:4px 10px;margin:4px 0 2px;font-size:11.5px;color:var(--sub)}
+  /* 📐 검증 규칙에서 나온 표시 — 어느 탭이든 같은 연두 상자 · 상태별 칩 */
+  .rulebox{background:#f1f9e9 !important;border:1px solid #cfe8b8;border-left:4px solid #8cc56a;border-radius:10px}
+  .rulebox .rtag{display:inline-block;font-size:10.5px;font-weight:700;color:#4a7d2c;margin-right:2px}
+  .rulebox .rc{display:inline-block;padding:2px 8px;border-radius:99px;background:#fff;border:1px solid #dde9d2;color:#55665a;font-size:11.5px}
+  .rulebox .rc.ok{background:#dcf2cc;border-color:#b9df9c;color:#2f6b1f;font-weight:700}
+  .rulebox .rc.bad{background:#ffedcc;border-color:#f3cf8c;color:#985700;font-weight:700}
+  .rulebox .rc.pull{background:#ffe1dc;border-color:#f5b5ab;color:#b8322a;font-weight:700}
+  .rulebox .rc i{font-style:normal;font-weight:400;opacity:.8}
+  .rulebox .rc .tip,.rulebox .rv .tip{transform:scale(.78);margin:0 1px 0 -4px;background:rgba(255,255,255,.7)}
+  .rulebox .rv{display:inline-block;padding:2px 8px;border-radius:8px;font-size:12px;font-weight:700}
+  .rulebox .rv.ok{background:#dcf2cc;color:#2f6b1f} .rulebox .rv.warn{background:#ffedcc;color:#985700} .rulebox .rv.pull{background:#ffe1dc;color:#b8322a}
+  .rulebox span.rl{background:#fff !important;border:1px solid #cfe8b8}
+  .rulebox.bf-rule{padding:6px;flex-wrap:wrap}
+  .rulebox.bf-rule button.on{background:#8cc56a !important;color:#fff !important;border-color:#8cc56a !important}
+  .bf-warn.rulebox{color:#5b4a1e}
+  body.dusk .rulebox{background:#1d3324 !important;border-color:#2f5238;border-left-color:#7fbf5f}
+  body.dusk .rulebox .rtag{color:#a9dc8c} body.dusk .rulebox .rc{background:#22352a;border-color:#33503c;color:#c9d8cc}
+  body.dusk .rulebox .rc.ok,body.dusk .rulebox .rv.ok{background:#264d2c;color:#b5eda0} body.dusk .rulebox .rc.bad,body.dusk .rulebox .rv.warn{background:#4a3a17;color:#f6cf7a} body.dusk .rulebox .rc.pull,body.dusk .rulebox .rv.pull{background:#4d2622;color:#ffb3a8}
+  .rules{display:flex;flex-wrap:wrap;gap:4px 6px;margin:6px 0 4px;padding:7px 9px;font-size:11.5px;color:var(--sub);align-items:center}
   .rules .rc i{font-style:normal;color:var(--faint);font-size:10.5px}
-  .rules .rc.ok{color:#2f855a} .rules .rc.bad{color:#b7791f;font-weight:700} .rules .rc.pull{color:#c0392b;font-weight:700}
-  .rules .rv{flex-basis:100%;margin:2px 0 0;font-size:12px;color:var(--sub)} .rules .rv.warn{color:#b7791f} .rules .rv.pull{color:#c0392b} .rules .rv.ok{color:#2f855a}
   .bf-warn{margin:0 0 10px;padding:9px 11px;border-radius:10px;background:#fff6e5;color:#8a5a00;font-size:13px;line-height:1.55}
   .bf-warn small{display:block;color:#8a5a00;font-size:12px;margin-top:2px}
   .bf-warn button{margin-top:6px;font-size:12px;padding:5px 11px;border-radius:99px !important;background:#6b46c1;color:#fff;border:none}
-  .candrule{margin:2px 0 2px 22px;font-size:11.5px;color:var(--sub)} .candrule i{font-style:normal;color:var(--faint)}
+  .candrule{margin:4px 0 4px 22px;font-size:11.5px;color:var(--sub);display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center}
+  .candrule.rulebox{padding:6px 8px} .candrule i{font-style:normal;color:var(--faint)}
   .candrule b{font-weight:700} .candrule b.ok{color:#2f855a} .candrule b.bad{color:#b7791f}
-  .candrule .filt{color:#b7791f;font-weight:700} .candrule .okk{color:#2f855a}
   .rp-sub{margin:10px 0 2px;font-size:12px;font-weight:700;color:var(--sub)} .rp-row.sm{font-size:12.5px}
   .bf-rule button{font-size:12.5px}
   .jtabs .jt{font-size:12px;color:var(--sub);margin-right:2px} .jtabs span.rl{background:#eef6ff}
@@ -647,7 +663,7 @@
     <label><span><i class="tip" data-tip="tr_date">?</i>산 날짜</span><input id="bfDate" type="date"></label>
     <label><span>왜 샀나요? (한 줄)</span><input id="bfWhy" placeholder="예: 20일선 회복 + 외국인 매수"></label>
     <span class="bf-lab"><i class="tip" data-tip="buy_rule">?</i>어떤 규칙으로 샀나요?</span>
-    <div class="bf-mood bf-rule" id="bfRule">
+    <div class="bf-mood bf-rule rulebox" id="bfRule">
       <button type="button" data-rule="trend">🚦 추세</button>
       <button type="button" data-rule="pull">🔁 눌림목</button>
       <button type="button" data-rule="close">🌙 종가베팅</button>
@@ -1550,14 +1566,15 @@ async function markRules(cands){
   for (const q of cands) {
     const el = () => document.querySelector(`.candrule[data-code="${q.code}"]`);
     if (!el()) return;
-    el().innerHTML = `<span class="rc"><i>📐 규칙 확인 중…</i></span>`;
+    el().classList.add("rulebox"); el().innerHTML = `<span class="rtag">📐 검증 규칙</span><span class="rc"><i>확인 중…</i></span>`;
     const rows = await getDaily(q.code);
     const e = el(); if (!e) return;
     const r = rows ? ruleCalc(rows, q.price) : null;
-    if (!r) { e.innerHTML = ""; continue; }
-    const c200 = r.gap200 == null ? `🚦 200일선 <i>기록 부족</i>` : `<b class="${r.gap200 >= 0 ? "ok" : "bad"}">🚦 200일선 ${r.gap200 >= 0 ? "위 ✅" : `아래 ${r.gap200}% ⚠️`}</b>`;
-    const c6 = r.m6 == null ? `📈 6개월 <i>기록 부족</i>` : `<b class="${r.m6 >= 0 ? "ok" : "bad"}">📈 6개월 ${r.m6 >= 0 ? "+" : ""}${r.m6}% ${r.m6 >= 0 ? "🔺" : "🔻"}</b>`;
-    e.innerHTML = `${tipHTML("r_cand")}${c200} · ${c6}${r.warn.length ? ` <span class="filt">→ 거르는 쪽</span>` : r.gap200 != null && r.m6 != null ? ` <span class="okk">→ 추세 OK</span>` : ""}`;
+    if (!r) { e.innerHTML = ""; e.classList.remove("rulebox"); continue; }
+    const c200 = r.gap200 == null ? `<span class="rc">🚦 200일선 <i>기록 부족</i></span>` : `<span class="rc ${r.gap200 >= 0 ? "ok" : "bad"}">🚦 200일선 ${r.gap200 >= 0 ? "위 ✅" : `아래 ${r.gap200}% ⚠️`}</span>`;
+    const c6 = r.m6 == null ? `<span class="rc">📈 6개월 <i>기록 부족</i></span>` : `<span class="rc ${r.m6 >= 0 ? "ok" : "bad"}">📈 6개월 ${r.m6 >= 0 ? "+" : ""}${r.m6}% ${r.m6 >= 0 ? "🔺" : "🔻"}</span>`;
+    e.classList.add("rulebox");
+    e.innerHTML = `<span class="rtag">${tipHTML("r_cand")}📐 검증 규칙</span>${c200}${c6}${r.warn.length ? `<span class="rv warn">→ 거르는 쪽</span>` : r.gap200 != null && r.m6 != null ? `<span class="rv ok">→ 추세 OK</span>` : ""}`;
     await new Promise(z => setTimeout(z, 300));
   }
 }
@@ -1917,7 +1934,7 @@ function rulesHTML(w){
   const cp = `<span class="rc ${r.pull ? "pull" : ""}">${tipHTML("r_pull")}🔁 ${r.pull ? "눌림목!" : "눌림목 아님"} <i>RSI(2) ${r.rsi2}${r.d3 != null ? ` · 3일 ${r.d3 >= 0 ? "+" : ""}${r.d3}%` : ""}</i></span>`;
   const c6 = r.m6 == null ? `<span class="rc">${tipHTML("r_6m")}📈 6개월 <i>기록 부족</i></span>`
     : `<span class="rc ${r.m6 >= 0 ? "ok" : "bad"}">${tipHTML("r_6m")}📈 6개월 ${r.m6 >= 0 ? "+" : ""}${r.m6}% ${r.m6 >= 0 ? "🔺" : "🔻"}</span>`;
-  return `<div class="rules">${c200}${cp}${c6}<p class="rv ${r.verdict.lv}">${tipHTML("r_sum")}→ ${r.verdict.t}</p></div>`;
+  return `<div class="rules rulebox"><span class="rtag">📐 검증 규칙</span>${c200}${cp}${c6}<p class="rv ${r.verdict.lv}">${tipHTML("r_sum")}→ ${r.verdict.t}</p></div>`;
 }
 
 /* 흐름 판정: 가격 > 5일선 > 20일선 > 60일선 이면 정배열 */
@@ -2067,7 +2084,7 @@ function journalGroups(j){
   if (paper.length) { parts.push(`💰 실전 ${stat(real) || "없음"}`); parts.push(`🧪 연습 ${stat(paper)}`); }
   Object.entries(MOODS).forEach(([k, t]) => { const a = j.filter(x => x.mood === k); if (a.length) parts.push(`${t} ${stat(a)}`); });
   const rparts = Object.entries(RULES).map(([k, t]) => { const a = j.filter(x => x.rule === k); return a.length ? `<span class="rl">${t} ${stat(a)}</span>` : ""; }).filter(Boolean);
-  if (rparts.length) return `<div class="jtabs">${tipHTML("j_rules")}<b class="jt">📐 규칙별</b>${rparts.join("")}</div>` + (parts.length ? `<div class="jtabs">${tipHTML("j_groups")}${parts.map(p => `<span>${p}</span>`).join("")}</div>` : "");
+  if (rparts.length) return `<div class="jtabs rulebox">${tipHTML("j_rules")}<span class="rtag">📐 검증 규칙별 성적</span>${rparts.join("")}</div>` + (parts.length ? `<div class="jtabs">${tipHTML("j_groups")}${parts.map(p => `<span>${p}</span>`).join("")}</div>` : "");
   return parts.length ? `<div class="jtabs">${tipHTML("j_groups")}${parts.map(p => `<span>${p}</span>`).join("")}</div>` : "";
 }
 function journalHTML(){
@@ -2538,10 +2555,10 @@ function openBuy(w){
   // 규칙상 조심할 점이 있으면 미리 알려 주기 (막지는 않음)
   { const r = ruleStats(w.code), box = $("bfWarn");
     if (first && r && r.warn.length) {
-      box.innerHTML = `⚠️ <b>${r.warn.join(" · ")}</b> 종목이에요.<br><small>${r.gap200 != null && r.gap200 < 0 ? `200일선보다 ${Math.abs(r.gap200)}% 아래 — 장기 추세가 꺾인 상태. ` : ""}${r.m6 != null && r.m6 < 0 ? `6개월 ${r.m6}% — 반년 내내 약했어요. ` : ""}그래도 살 수 있어요. 처음엔 연습으로 해 볼까요?</small> <button type="button" id="bfToPaper">🧪 연습으로 바꾸기</button>`;
+      box.className = "bf-warn rulebox"; box.innerHTML = `<span class="rtag">📐 검증 규칙</span><br>⚠️ <b>${r.warn.join(" · ")}</b> 종목이에요.<br><small>${r.gap200 != null && r.gap200 < 0 ? `200일선보다 ${Math.abs(r.gap200)}% 아래 — 장기 추세가 꺾인 상태. ` : ""}${r.m6 != null && r.m6 < 0 ? `6개월 ${r.m6}% — 반년 내내 약했어요. ` : ""}그래도 살 수 있어요. 처음엔 연습으로 해 볼까요?</small> <button type="button" id="bfToPaper">🧪 연습으로 바꾸기</button>`;
       box.hidden = false;
       document.getElementById("bfToPaper").onclick = () => { document.querySelectorAll("#bfMode button").forEach(b => b.classList.toggle("on", b.dataset.mode === "paper")); box.querySelector("small").textContent = "🧪 연습으로 바꿨어요. 돈 없이 기록만 해요."; };
-    } else if (first && r && r.pull) { box.innerHTML = `🔁 <b>눌림목</b> — 200일선 위에서 짧게 많이 빠진 상태예요 (RSI(2) ${r.rsi2}).`; box.hidden = false; }
+    } else if (first && r && r.pull) { box.className = "bf-warn rulebox"; box.innerHTML = `<span class="rtag">📐 검증 규칙</span><br>🔁 <b>눌림목</b> — 200일선 위에서 짧게 많이 빠진 상태예요 (RSI(2) ${r.rsi2}).`; box.hidden = false; }
     else box.hidden = true; }
   $("bfDate").value = ymdToIso(w.buyDate || todayKey());
   bfTotal();
