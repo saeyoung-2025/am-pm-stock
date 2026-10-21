@@ -440,6 +440,19 @@
   .fl-bars b{position:absolute;left:0;right:0;border-radius:2px} .fl-bars b.up{background:#f0a59c} .fl-bars b.down{background:#8fb0ec}
   .fl-sum{grid-column:2;margin:0;font-size:11px;color:var(--sub)} .fl-sum b{font-family:Nunito,sans-serif}
   .fl-dates{display:flex;justify-content:space-between;margin:0 0 0 48px;font-size:10px;color:var(--faint)}
+  .rules{display:flex;flex-wrap:wrap;gap:4px 10px;margin:4px 0 2px;font-size:11.5px;color:var(--sub)}
+  .rules .rc i{font-style:normal;color:var(--faint);font-size:10.5px}
+  .rules .rc.ok{color:#2f855a} .rules .rc.bad{color:#b7791f;font-weight:700} .rules .rc.pull{color:#c0392b;font-weight:700}
+  .rules .rv{flex-basis:100%;margin:2px 0 0;font-size:12px;color:var(--sub)} .rules .rv.warn{color:#b7791f} .rules .rv.pull{color:#c0392b} .rules .rv.ok{color:#2f855a}
+  .bf-warn{margin:0 0 10px;padding:9px 11px;border-radius:10px;background:#fff6e5;color:#8a5a00;font-size:13px;line-height:1.55}
+  .bf-warn small{display:block;color:#8a5a00;font-size:12px;margin-top:2px}
+  .bf-warn button{margin-top:6px;font-size:12px;padding:5px 11px;border-radius:99px !important;background:#6b46c1;color:#fff;border:none}
+  .candrule{margin:2px 0 2px 22px;font-size:11.5px;color:var(--sub)} .candrule i{font-style:normal;color:var(--faint)}
+  .candrule b{font-weight:700} .candrule b.ok{color:#2f855a} .candrule b.bad{color:#b7791f}
+  .candrule .filt{color:#b7791f;font-weight:700} .candrule .okk{color:#2f855a}
+  .rp-sub{margin:10px 0 2px;font-size:12px;font-weight:700;color:var(--sub)} .rp-row.sm{font-size:12.5px}
+  .bf-rule button{font-size:12.5px}
+  .jtabs .jt{font-size:12px;color:var(--sub);margin-right:2px} .jtabs span.rl{background:#eef6ff}
   .kr-news{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);font-size:13px}
   .kr-news b{margin-right:4px}
   .kr-news a{padding:4px 11px;border-radius:99px;background:var(--chip);color:var(--accent);text-decoration:none;font-size:12px;font-weight:600}
@@ -616,6 +629,7 @@
     <button class="modal-x" id="buyClose" aria-label="닫기">×</button>
     <h3 id="buyTitle">💰 매수 기록</h3>
     <p class="bf-lab" style="margin:0 0 4px"><i class="tip" data-tip="buy_mode">?</i>어떤 매수인가요?</p>
+    <div class="bf-warn" id="bfWarn" hidden></div>
     <div class="bf-mode" id="bfMode">
       <button type="button" data-mode="real" class="on">💰 실전</button>
       <button type="button" data-mode="paper">🧪 연습 <small>(돈 없이 기록만)</small></button>
@@ -632,6 +646,13 @@
     <p class="bf-hint" id="bfHint"></p>
     <label><span><i class="tip" data-tip="tr_date">?</i>산 날짜</span><input id="bfDate" type="date"></label>
     <label><span>왜 샀나요? (한 줄)</span><input id="bfWhy" placeholder="예: 20일선 회복 + 외국인 매수"></label>
+    <span class="bf-lab"><i class="tip" data-tip="buy_rule">?</i>어떤 규칙으로 샀나요?</span>
+    <div class="bf-mood bf-rule" id="bfRule">
+      <button type="button" data-rule="trend">🚦 추세</button>
+      <button type="button" data-rule="pull">🔁 눌림목</button>
+      <button type="button" data-rule="close">🌙 종가베팅</button>
+      <button type="button" data-rule="gut">🙂 감·그냥</button>
+    </div>
     <span class="bf-lab"><i class="tip" data-tip="buy_mood">?</i>지금 기분은?</span>
     <div class="bf-mood" id="bfMood">
       <button type="button" data-mood="sure">😎 확신</button>
@@ -1435,6 +1456,11 @@ function reportHTML(){
     <div class="rp-row"><span>${tipHTML("c_rp")}🟢 관심</span><b>${st(g)}</b></div>
     <div class="rp-row"><span>🟡 주의</span><b>${st(y)}</b></div>
     <p class="rp-note">${tipHTML("c_hit")}다음 날 시초가에 올랐으면 적중으로 셉니다. 기록 ${days.length}일 · 결과 ${done.length}건</p>`;
+  // ④ 0단계 신호별: 그날 0단계가 ✅/⚠️/🛑 였을 때 후보 성적 — 0단계 규칙이 쓸모 있는지 내 기록으로 확인
+  { const by = lv => done.filter(i => (rec[i.d] || {}).s0 === lv);
+    const rows = [["ok", "✅ 평소대로인 날"], ["warn", "⚠️ 조심한 날"], ["stop", "🛑 쉬라던 날"]].map(([lv, t]) => [t, by(lv)]).filter(([, a]) => a.length);
+    if (rows.length) h += `<p class="rp-sub">${tipHTML("c_rp_s0")}0단계 신호별 성적</p>` + rows.map(([t, a]) => `<div class="rp-row sm"><span>${t}</span><b>${st(a)}</b></div>`).join("");
+  }
   const recent = days.slice(0, 5);
   if (recent.length){
     h += `<table class="rp">` + recent.map(d => {
@@ -1510,12 +1536,30 @@ async function loadClosing(){
           <em>${esc((q.why || []).concat(q.why3 || []).join(" · "))}</em></div>
         <div class="px">${q.price != null ? q.price.toLocaleString() : "–"}
           <small class="${q.change >= 0 ? "up" : "down"}">${pct(q.change)}</small></div>
-      </div><p class="dartbad" data-code="${esc(q.code)}" hidden></p>${trailHTML(q.code)}${explain(q) ? `<p class="memo">💬 ${esc(explain(q))}</p>` : ""}</div>`).join("") + `</div></section>`;
+      </div><p class="dartbad" data-code="${esc(q.code)}" hidden></p><div class="candrule" data-code="${esc(q.code)}" data-price="${q.price || ""}"></div>${trailHTML(q.code)}${explain(q) ? `<p class="memo">💬 ${esc(explain(q))}</p>` : ""}</div>`).join("") + `</div></section>`;
   }
   if ((j.tooDeep || []).length) html += `<p class="errinfo">${tipHTML("c_deep")}${r.dropMax}%보다 깊게 빠져 제외: ${j.tooDeep.map(x => `${esc(x.name)} ${pct(x.change)}`).join(", ")}</p>`;
   html += `<div id="cbReport">${reportHTML()}</div>`;
   document.getElementById("cbBody").innerHTML = html;
   markDartBad(c.filter(q => q.signal === "green" || q.signal === "yellow").map(q => q.code));
+  markRules(c.filter(q => q.signal === "green" || q.signal === "yellow").slice(0, 10));
+}
+/* 후보에 ① 200일선 ③ 6개월 추세 표시 — 일봉을 하나씩 천천히 받아서 채움 (거르는 기준: 둘 중 하나라도 ⚠️면 '거르는 쪽') */
+async function markRules(cands){
+  if (location.protocol === "file:") return;
+  for (const q of cands) {
+    const el = () => document.querySelector(`.candrule[data-code="${q.code}"]`);
+    if (!el()) return;
+    el().innerHTML = `<span class="rc"><i>📐 규칙 확인 중…</i></span>`;
+    const rows = await getDaily(q.code);
+    const e = el(); if (!e) return;
+    const r = rows ? ruleCalc(rows, q.price) : null;
+    if (!r) { e.innerHTML = ""; continue; }
+    const c200 = r.gap200 == null ? `🚦 200일선 <i>기록 부족</i>` : `<b class="${r.gap200 >= 0 ? "ok" : "bad"}">🚦 200일선 ${r.gap200 >= 0 ? "위 ✅" : `아래 ${r.gap200}% ⚠️`}</b>`;
+    const c6 = r.m6 == null ? `📈 6개월 <i>기록 부족</i>` : `<b class="${r.m6 >= 0 ? "ok" : "bad"}">📈 6개월 ${r.m6 >= 0 ? "+" : ""}${r.m6}% ${r.m6 >= 0 ? "🔺" : "🔻"}</b>`;
+    e.innerHTML = `${tipHTML("r_cand")}${c200} · ${c6}${r.warn.length ? ` <span class="filt">→ 거르는 쪽</span>` : r.gap200 != null && r.m6 != null ? ` <span class="okk">→ 추세 OK</span>` : ""}`;
+    await new Promise(z => setTimeout(z, 300));
+  }
 }
 /* 후보 중 최근 3일 안에 🔴 악재 공시가 있으면 표시 (DART 키가 있을 때만) */
 async function markDartBad(codes){
@@ -1542,6 +1586,17 @@ setInterval(fillResults, 10 * 60 * 1000);
 const HOLD_DEF = { stop: -7, take: 10 };
 /* 📌 업데이트 기록 — 새로 바꿀 때마다 맨 위에 추가 */
 const UPDATE_LOG = [
+  { date:"2026.10.21", tab:"watch", items:[
+    ["📐 검증된 규칙 신호 ①②③", "자료 공부할 시간이 없어도 종목마다 규칙을 바로 보려고. 관심종목 카드에 🚦 200일선 위/아래, 🔁 눌림목(RSI(2)), 📈 6개월 추세와 '→ 종합' 한 줄. 각 ?에 근거 연구."],
+    ["💰 살 때 한 번 더 알려 주기", "200일선 아래·6개월 약세 종목을 살 때 매수 창 위에 ⚠️ 안내 + '🧪 연습으로 바꾸기' 버튼 (막지는 않음)."],
+    ["🔁 눌림목 알림", "좋은 종목이 잠깐 싸진 때를 놓치지 않게. 폰(오후 2:50~3:10 하루 한 번)·PC 알림에 눌림목 추가."],
+    ["⑤ 규칙 태그 + 규칙별 성적", "논문 규칙은 알려진 뒤 효과가 줄어서, 내 성적으로 확인하려고. 매수 창에 '어떤 규칙으로 샀나요?', 매매기록 성적표에 📐 규칙별 승률."],
+    ["일봉 250일로 늘림", "200일선·6개월 추세 계산에 필요해서 (전에는 약 100일)."],
+  ]},
+  { date:"2026.10.21", tab:"closing", items:[
+    ["후보에 규칙 표시 (①③)", "많이 빠진 게 '잠깐'인지 '원래 약한' 종목인지 구분하려고. 후보마다 200일선·6개월 추세와 '→ 거르는 쪽 / 추세 OK'."],
+    ["④ 성적표를 0단계 신호별로", "0단계 규칙이 쓸모 있는지 내 기록으로 확인하려고. ✅·⚠️·🛑 날마다 후보 성적을 따로."],
+  ]},
   { date:"2026.10.21", tab:"closing", items:[
     ["0단계에 '오늘 수급' 추가", "외국인·기관이 요즘 장을 좌우해서. 코스피 외국인·기관의 매수÷매도 비율을 보여 주고, 둘 다 0.9배 이하(같이 파는 날)면 ⚠️ 하나로 셈."],
     ["0단계에 '만기일' 추가", "네 마녀의 날(3·6·9·12월 둘째 목요일)엔 장 막판 프로그램 매매로 종가가 출렁여서. 그날이면 ⚠️ 하나로 셈 (매달 옵션 만기는 표시만)."],
@@ -1777,10 +1832,15 @@ const api = async (qs) => {
 async function getDaily(code){
   const cache = store.get("mm_daily", {});
   const c = cache[code];
-  if (c && c.day === todayKey() && Date.now() - c.at < 60*60*1000 && (c.rows.length > 30 || c.short)) return c.rows;
+  if (c && c.day === todayKey() && Date.now() - c.at < 60*60*1000 && (c.rows.length >= 200 || c.full)) return c.rows;
   try {
     const j = await api("daily=" + code);
-    if (j.status === "ok") { cache[code] = { day: todayKey(), at: Date.now(), rows: j.rows, short: j.rows.length <= 30 }; store.set("mm_daily", cache); return j.rows; }
+    // full = 200일선을 계산할 만큼(약 250일) 받았거나, 상장이 짧아서 더 받을 게 없음
+    if (j.status === "ok") {
+      cache[code] = { day: todayKey(), at: Date.now(), rows: j.rows, full: j.rows.length >= 200 || !!j.short };
+      // 관심종목이 아닌 지난 날 기록(저녁 후보 확인용)은 지워서 저장 공간 아끼기
+      Object.keys(cache).forEach(k => { if (cache[k].day !== todayKey() && !watch.some(w => w.code === k)) delete cache[k]; });
+      store.set("mm_daily", cache); return j.rows; }
   } catch(e) {}
   return c ? c.rows : null;
 }
@@ -1817,6 +1877,49 @@ function stats(code){
   }
   return st;
 }
+/* ── 📐 검증된 규칙 신호 (① 200일선 ② 눌림목 RSI(2) ③ 6개월 추세) ──
+   rows는 일봉(최신 먼저), 지금 가격이 있으면 오늘 값으로 씀 */
+function ruleCalc(rows, curPrice){
+  if (!rows || rows.length < 10) return null;
+  const today = todayKey(), past = rows.filter(r => r.date !== today), cl = past.map(r => r.close);
+  const cur = curPrice || (rows[0] && rows[0].close);
+  if (!cur || cl.length < 10) return null;
+  const r = { cur, n: cl.length };
+  // ① 200일선 (최근 200거래일 종가 평균)
+  if (cl.length >= 200) { r.ma200 = avg(cl.slice(0, 200)); r.gap200 = +(((cur / r.ma200) - 1) * 100).toFixed(1); }
+  // ② RSI(2): 최근 2일 오른 폭 vs 내린 폭 (와일더 방식, 0~100). 10 아래 = 아주 짧게 많이 빠짐
+  const ser = [...cl.slice(0, 40)].reverse().concat([cur]);
+  let up = 0, dn = 0;
+  for (let i = 1; i < ser.length; i++) { const d = ser[i] - ser[i - 1], u = Math.max(d, 0), w = Math.max(-d, 0);
+    if (i <= 2) { up += u / 2; dn += w / 2; } else { up = (up * 1 + u) / 2; dn = (dn * 1 + w) / 2; } }
+  r.rsi2 = dn === 0 ? 100 : +(100 - 100 / (1 + up / dn)).toFixed(0);
+  r.d3 = cl.length >= 3 ? +(((cur / cl[2]) - 1) * 100).toFixed(1) : null;   // 최근 3일 등락
+  r.pull = r.ma200 != null && cur > r.ma200 && r.rsi2 < 10;
+  // ③ 6개월(약 126거래일) 수익률
+  if (cl.length >= 126) r.m6 = +(((cur / cl[125]) - 1) * 100).toFixed(1);
+  // 종합
+  const warn = [];
+  if (r.gap200 != null && r.gap200 < 0) warn.push("200일선 아래");
+  if (r.m6 != null && r.m6 < 0) warn.push("6개월 약세");
+  r.warn = warn;
+  r.verdict = warn.length ? { lv: "warn", t: `지금은 지켜보기 — ${warn.join(" · ")}. 산다면 🧪 연습으로 먼저` }
+    : r.pull ? { lv: "pull", t: "🔁 눌림목 — 오르는 종목이 잠깐 싸진 때. 규칙상 살펴볼 만해요" }
+    : r.gap200 != null && r.m6 != null ? { lv: "ok", t: "추세 양호 — 200일선 위 · 6개월 상승" }
+    : { lv: "", t: "기록이 짧아 일부만 판단했어요" };
+  return r;
+}
+function ruleStats(code){ const c = store.get("mm_daily", {})[code]; const q = wlQuotes[code]; return c ? ruleCalc(c.rows, q && q.price) : null; }
+function rulesHTML(w){
+  const r = ruleStats(w.code);
+  if (!r) return "";
+  const c200 = r.gap200 == null ? `<span class="rc">${tipHTML("r_200")}🚦 200일선 <i>기록 ${r.n}일 — 부족</i></span>`
+    : `<span class="rc ${r.gap200 >= 0 ? "ok" : "bad"}">${tipHTML("r_200")}🚦 200일선 ${r.gap200 >= 0 ? "위" : "아래"} ${r.gap200 >= 0 ? "+" : ""}${r.gap200}% ${r.gap200 >= 0 ? "✅" : "⚠️"}</span>`;
+  const cp = `<span class="rc ${r.pull ? "pull" : ""}">${tipHTML("r_pull")}🔁 ${r.pull ? "눌림목!" : "눌림목 아님"} <i>RSI(2) ${r.rsi2}${r.d3 != null ? ` · 3일 ${r.d3 >= 0 ? "+" : ""}${r.d3}%` : ""}</i></span>`;
+  const c6 = r.m6 == null ? `<span class="rc">${tipHTML("r_6m")}📈 6개월 <i>기록 부족</i></span>`
+    : `<span class="rc ${r.m6 >= 0 ? "ok" : "bad"}">${tipHTML("r_6m")}📈 6개월 ${r.m6 >= 0 ? "+" : ""}${r.m6}% ${r.m6 >= 0 ? "🔺" : "🔻"}</span>`;
+  return `<div class="rules">${c200}${cp}${c6}<p class="rv ${r.verdict.lv}">${tipHTML("r_sum")}→ ${r.verdict.t}</p></div>`;
+}
+
 /* 흐름 판정: 가격 > 5일선 > 20일선 > 60일선 이면 정배열 */
 function trendOf(w){
   const st = stats(w.code), q = wlQuotes[w.code];
@@ -1873,6 +1976,7 @@ function signals(w){
   if (q.w52low && q.price <= q.w52low * 1.05) out.push({ k:"low52", t:"52주 최저가 근처", c:"down" });
   if (q.prev && q.low && q.low <= q.prev * 0.97 && (q.price - q.low) >= (q.prev - q.low) * 0.5)
     out.push({ k:"tail", t:"아래꼬리 반등", c:"up" });
+  { const r = ruleStats(w.code); if (r && r.pull) out.push({ k:"pull", t:`🔁 눌림목 (RSI(2) ${r.rsi2})`, c:"hot" }); }
   return out;
 }
 const TIP = {
@@ -1882,6 +1986,7 @@ const TIP = {
   th:"내가 정한 기준(%)보다 많이 움직였다는 뜻입니다.",
   ma_break:"어제까지 한 달 평균(20일선) 위에 있다가 오늘 아래로 떨어졌습니다. 오르던 흐름이 꺾일 수 있다는 신호예요.",
   ma_back:"한 달 평균(20일선) 아래에 있다가 오늘 다시 올라섰습니다. 흐름이 되살아날 수 있다는 신호예요.",
+  pull:"200일선 위(장기 상승)인데 최근 2~3일 짧게 많이 빠졌습니다 (RSI(2) 10 미만). 검증된 규칙상 '좋은 종목이 잠깐 싸진 때'예요. 산다면 🔁 눌림목 태그로, 처음엔 🧪 연습 추천.",
   vol:"오늘 거래량이 평소(20일 평균)의 3배가 넘었습니다. 뉴스나 공시 같은 일이 생겼을 가능성이 커요.",
   low52:"1년 중 가장 싼 가격 근처입니다. 바닥일 수도, 더 내려갈 수도 있어 신중해야 해요.",
   tail:"장중에 3% 넘게 빠졌다가 절반 이상 회복했습니다. 사려는 힘이 들어왔다는 뜻으로, 종가베팅에서 좋게 보는 모양이에요."
@@ -1936,6 +2041,7 @@ function renderWatch(){
           <small class="${ch == null ? "" : ch >= 0 ? "up" : "down"}">${ch == null ? "데이터 없음" : `<em class="plab">${marketOpen() ? "장중" : "정규장"}</em>${pct(ch)}`}</small>${afterTag(w.code)}</div>
       </div>
       ${ovHTML(w)}
+      ${rulesHTML(w)}
       ${holdHTML(w, i)}
       ${sg.length ? `<div class="chips">${sg.map(x => `<span class="chip ${x.c}">${x.k === "th" ? "🔔 " : ""}${x.t}</span>`).join("")}</div>` : ""}
       <div class="r2">
@@ -1960,6 +2066,8 @@ function journalGroups(j){
   const real = j.filter(x => !x.paper), paper = j.filter(x => x.paper);
   if (paper.length) { parts.push(`💰 실전 ${stat(real) || "없음"}`); parts.push(`🧪 연습 ${stat(paper)}`); }
   Object.entries(MOODS).forEach(([k, t]) => { const a = j.filter(x => x.mood === k); if (a.length) parts.push(`${t} ${stat(a)}`); });
+  const rparts = Object.entries(RULES).map(([k, t]) => { const a = j.filter(x => x.rule === k); return a.length ? `<span class="rl">${t} ${stat(a)}</span>` : ""; }).filter(Boolean);
+  if (rparts.length) return `<div class="jtabs">${tipHTML("j_rules")}<b class="jt">📐 규칙별</b>${rparts.join("")}</div>` + (parts.length ? `<div class="jtabs">${tipHTML("j_groups")}${parts.map(p => `<span>${p}</span>`).join("")}</div>` : "");
   return parts.length ? `<div class="jtabs">${tipHTML("j_groups")}${parts.map(p => `<span>${p}</span>`).join("")}</div>` : "";
 }
 function journalHTML(){
@@ -2098,10 +2206,10 @@ document.getElementById("wlBody").addEventListener("click", async e => {
     const memo = prompt(`팔고 나서 한 줄 (잘한 점·아쉬운 점)`, "") || "";
     const j = store.get("mm_journal", []);
     j.unshift({ code: w.code, name: w.name, buy: w.buy, sell: n, ret: +(((n / w.buy) - 1) * 100).toFixed(2),
-      why: w.why || "", memo: memo.trim(), buyDate: w.buyDate || "", sellDate: todayKey(), paper: !!w.paper, mood: w.mood || null,
+      why: w.why || "", memo: memo.trim(), buyDate: w.buyDate || "", sellDate: todayKey(), paper: !!w.paper, mood: w.mood || null, rule: w.rule || null,
       qty: w.qty || null, pnl: w.qty ? Math.round((n - w.buy) * w.qty) : null });
     store.set("mm_journal", j.slice(0, 200));
-    w.buy = null; w.why = ""; w.buyDate = ""; w.paper = false; w.mood = null; w.qty = null;
+    w.buy = null; w.why = ""; w.buyDate = ""; w.paper = false; w.mood = null; w.qty = null; w.rule = null;
     schedulePushSync();
     saveWatch(); renderWatch(); return;
   }
@@ -2135,16 +2243,17 @@ async function loadWatch(){
   renderWatch();
   await getKospi();
   // 일봉 기록은 하루 한 번, 천천히 채움
-  for (const w of watch) { const c = store.get("mm_daily", {})[w.code]; if (!c || c.day !== todayKey() || (c.rows.length <= 30 && !c.short)) { await getDaily(w.code); await new Promise(r => setTimeout(r, 400)); } }
+  for (const w of watch) { const c = store.get("mm_daily", {})[w.code]; if (!c || c.day !== todayKey() || (!c.full && c.rows.length < 200 && Date.now() - c.at > 60*60*1000)) { await getDaily(w.code); await new Promise(r => setTimeout(r, 400)); } }
   renderWatch();
   checkAlerts();
 }
 document.getElementById("wlRefresh").addEventListener("click", loadWatch);
 
 /* 알림 */
-const ALERT_KINDS = { stop:"손절선", warn:"손절 절반", take:"목표 도달", th:"등락 기준", ma_break:"20일선 붕괴", ma_back:"20일선 회복", vol:"거래량 급증", low52:"52주 최저가 근처", tail:"아래꼬리 반등" };
+const ALERT_KINDS = { stop:"손절선", warn:"손절 절반", take:"목표 도달", th:"등락 기준", ma_break:"20일선 붕괴", ma_back:"20일선 회복", vol:"거래량 급증", low52:"52주 최저가 근처", tail:"아래꼬리 반등", pull:"🔁 눌림목 (규칙)" };
 let alertOn = { stop:true, warn:true, take:true, ...store.get("mm_alert_kinds", {}) };
 const _old = store.get("mm_alert_kinds", null); if (!_old) Object.assign(alertOn, { th:true, ma_break:true, ma_back:true, vol:true, low52:false, tail:true });
+if (alertOn.pull === undefined) alertOn.pull = true;   // 새로 생긴 🔁 눌림목 알림은 기본으로 켬
 function renderAlertKinds(){
   document.getElementById("wlKinds").innerHTML = Object.entries(ALERT_KINDS).map(([k, t]) =>
     `<label>${tipHTML("k_" + k)}<input type="checkbox" data-k="${k}" ${alertOn[k] ? "checked" : ""}> ${t}</label>`).join("");
@@ -2200,6 +2309,7 @@ document.getElementById("refresh").addEventListener("click", refresh);
 refresh();
 /* ── 💰 매수 기록 입력 창 (실전/연습 · 기분) ── */
 const MOODS = { sure:"😎 확신", worry:"😟 불안", impulse:"⚡ 충동", follow:"👥 남 따라" };
+const RULES = { trend:"🚦 추세(200일선 위)", pull:"🔁 눌림목", close:"🌙 종가베팅", gut:"🙂 감·그냥" };
 /* ── 📒 매매기록 탭 ── */
 function ymdToIso(d){ return d && d.length === 8 ? `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6)}` : ""; }
 function isoToYmd(d){ return /^\d{4}-\d{2}-\d{2}$/.test(d || "") ? d.replace(/-/g, "") : ""; }
@@ -2238,14 +2348,14 @@ function renderTrade(){
   const head = `<tr><th>종목</th><th>매수일</th><th>매수가</th><th>수량</th><th>매도일</th><th>매도가</th><th>보유</th><th>수익률</th><th>손익</th><th></th></tr>`;
   const openRow = w => { const i = watch.indexOf(w), q = wlQuotes[w.code], my = myRet(w);
     const pn = w.qty && q && q.price ? (q.price - w.buy) * w.qty : null;
-    return `<tr class="open"><td><b>${esc(w.name)}</b>${w.mood ? ` <small>${MOODS[w.mood].split(" ")[0]}</small>` : ""}</td><td>${md(w.buyDate)}</td>
+    return `<tr class="open"><td><b>${esc(w.name)}</b>${w.rule ? ` <small title="${RULES[w.rule]}">${RULES[w.rule].split(" ")[0]}</small>` : ""}${w.mood ? ` <small>${MOODS[w.mood].split(" ")[0]}</small>` : ""}</td><td>${md(w.buyDate)}</td>
       <td class="n">${w.buy.toLocaleString()}</td><td class="n">${w.qty ? w.qty.toLocaleString() : "–"}</td>
       <td class="hold-c">보유 중</td><td class="n faint">${q && q.price ? q.price.toLocaleString() + "*" : ""}</td>
       <td class="n">${holdDays(w.buyDate) ?? "–"}일</td>
       <td class="n ${my == null ? "" : my >= 0 ? "up" : "down"}">${my == null ? "–" : pct(my) + "*"}</td>
       <td class="n ${pn == null ? "" : pn >= 0 ? "up" : "down"}">${pn == null ? "–" : wonPL(pn) + "*"}</td>
       <td class="act"><button data-act="tedit" data-i="${i}">✏️</button><button class="sell" data-act="tsell" data-i="${i}">팔았어요</button></td></tr>`; };
-  const closedRow = (x, k) => `<tr><td><b>${esc(x.name)}</b>${x.mood ? ` <small>${MOODS[x.mood].split(" ")[0]}</small>` : ""}${x.memo || x.why ? ` <i class="memo-i" data-act="tmemo" data-k="${k}" title="메모 보기">📝</i>` : ""}</td>
+  const closedRow = (x, k) => `<tr><td><b>${esc(x.name)}</b>${x.rule ? ` <small title="${RULES[x.rule]}">${RULES[x.rule].split(" ")[0]}</small>` : ""}${x.mood ? ` <small>${MOODS[x.mood].split(" ")[0]}</small>` : ""}${x.memo || x.why ? ` <i class="memo-i" data-act="tmemo" data-k="${k}" title="메모 보기">📝</i>` : ""}</td>
       <td>${md(x.buyDate)}</td><td class="n">${x.buy.toLocaleString()}</td><td class="n">${x.qty ? x.qty.toLocaleString() : "–"}</td>
       <td>${md(x.sellDate)}</td><td class="n">${x.sell.toLocaleString()}</td><td class="n">${holdDays(x.buyDate, x.sellDate) ?? "–"}${x.buyDate ? "일" : ""}</td>
       <td class="n ${x.ret >= 0 ? "up" : "down"}">${pct(x.ret)}</td><td class="n ${x.pnl == null ? "" : x.pnl >= 0 ? "up" : "down"}">${x.pnl == null ? "–" : wonPL(x.pnl)}</td>
@@ -2313,11 +2423,11 @@ document.getElementById("sfSave").addEventListener("click", () => {
   if (w.buyDate && sd < w.buyDate) { alert("판 날짜가 산 날짜보다 빨라요. 날짜를 확인해 주세요."); return; }
   const j = store.get("mm_journal", []);
   j.unshift({ code: w.code, name: w.name, buy: w.buy, sell: n, ret: +(((n / w.buy) - 1) * 100).toFixed(2),
-    why: w.why || "", memo: $("sfMemo").value.trim(), buyDate: w.buyDate || "", sellDate: sd, paper: !!w.paper, mood: w.mood || null,
+    why: w.why || "", memo: $("sfMemo").value.trim(), buyDate: w.buyDate || "", sellDate: sd, paper: !!w.paper, mood: w.mood || null, rule: w.rule || null,
     qty: w.qty || null, pnl: w.qty ? Math.round((n - w.buy) * w.qty) : null });
   j.sort((a, b) => (b.sellDate || "").localeCompare(a.sellDate || ""));
   store.set("mm_journal", j.slice(0, 500));
-  w.buy = null; w.why = ""; w.buyDate = ""; w.paper = false; w.mood = null; w.qty = null;
+  w.buy = null; w.why = ""; w.buyDate = ""; w.paper = false; w.mood = null; w.qty = null; w.rule = null;
   $("sellModal").hidden = true;
   schedulePushSync(); saveWatch(); renderWatch();
 });
@@ -2425,11 +2535,21 @@ function openBuy(w){
   $("bfTake").value = w.take;
   $("bfWhy").value = w.why || "";
   $("bfQty").value = w.qty || "";
+  // 규칙상 조심할 점이 있으면 미리 알려 주기 (막지는 않음)
+  { const r = ruleStats(w.code), box = $("bfWarn");
+    if (first && r && r.warn.length) {
+      box.innerHTML = `⚠️ <b>${r.warn.join(" · ")}</b> 종목이에요.<br><small>${r.gap200 != null && r.gap200 < 0 ? `200일선보다 ${Math.abs(r.gap200)}% 아래 — 장기 추세가 꺾인 상태. ` : ""}${r.m6 != null && r.m6 < 0 ? `6개월 ${r.m6}% — 반년 내내 약했어요. ` : ""}그래도 살 수 있어요. 처음엔 연습으로 해 볼까요?</small> <button type="button" id="bfToPaper">🧪 연습으로 바꾸기</button>`;
+      box.hidden = false;
+      document.getElementById("bfToPaper").onclick = () => { document.querySelectorAll("#bfMode button").forEach(b => b.classList.toggle("on", b.dataset.mode === "paper")); box.querySelector("small").textContent = "🧪 연습으로 바꿨어요. 돈 없이 기록만 해요."; };
+    } else if (first && r && r.pull) { box.innerHTML = `🔁 <b>눌림목</b> — 200일선 위에서 짧게 많이 빠진 상태예요 (RSI(2) ${r.rsi2}).`; box.hidden = false; }
+    else box.hidden = true; }
   $("bfDate").value = ymdToIso(w.buyDate || todayKey());
   bfTotal();
   $("bfHint").textContent = st && st.stopSuggest != null ? `이 종목은 평소 하루 ${st.atrPct}% 움직여서 손절 ${st.stopSuggest}%를 권장해요.` : "손절선은 목표보다 작게 잡는 게 원칙이에요.";
   document.querySelectorAll("#bfMode button").forEach(b => b.classList.toggle("on", b.dataset.mode === (w.paper ? "paper" : "real")));
   document.querySelectorAll("#bfMood button").forEach(b => b.classList.toggle("on", b.dataset.mood === w.mood));
+  { const r0 = !w.buy ? ruleStats(w.code) : null, pre = w.rule || (r0 && r0.pull ? "pull" : null);
+    document.querySelectorAll("#bfRule button").forEach(b => b.classList.toggle("on", b.dataset.rule === pre)); }
   $("buyModal").hidden = false;
   setTimeout(() => $("bfBuy").focus(), 50);
 }
@@ -2439,6 +2559,7 @@ function bfTotal(){
 }
 ["bfBuy","bfQty"].forEach(id => document.getElementById(id).addEventListener("input", bfTotal));
 document.getElementById("bfMode").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; document.querySelectorAll("#bfMode button").forEach(x => x.classList.toggle("on", x === b)); });
+document.getElementById("bfRule").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; const was = b.classList.contains("on"); document.querySelectorAll("#bfRule button").forEach(x => x.classList.remove("on")); if (!was) b.classList.add("on"); });
 document.getElementById("bfMood").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; const was = b.classList.contains("on"); document.querySelectorAll("#bfMood button").forEach(x => x.classList.remove("on")); if (!was) b.classList.add("on"); });
 document.getElementById("buyClose").addEventListener("click", () => document.getElementById("buyModal").hidden = true);
 document.getElementById("buyModal").addEventListener("click", e => { if (e.target.id === "buyModal") e.currentTarget.hidden = true; });
@@ -2455,6 +2576,7 @@ document.getElementById("bfSave").addEventListener("click", () => {
   w.qty = Number(String($("bfQty").value).replace(/[^\d]/g, "")) || null;
   w.paper = (document.querySelector("#bfMode button.on") || {}).dataset?.mode === "paper";
   w.mood = (document.querySelector("#bfMood button.on") || {}).dataset?.mood || null;
+  w.rule = (document.querySelector("#bfRule button.on") || {}).dataset?.rule || null;
   w.buyDate = isoToYmd($("bfDate").value) || w.buyDate || todayKey();
   w.on = true;
   $("buyModal").hidden = true;
@@ -2524,6 +2646,14 @@ async function loadPhone(){
 
 /* ── ? 메모 (마우스를 올리거나 누르면 설명) ── */
 const TIPS = {
+  r_200:["🚦 ① 200일선 (장기 추세)", "최근 200거래일(약 10개월) 종가의 평균. <b>지금 가격이 그 위면 ✅ 장기 상승, 아래면 ⚠️ 장기 추세가 꺾인 상태</b>.<br>%는 200일선에서 얼마나 떨어져 있는지.", "근거: Faber(2007) — 200일선(10개월선) 아래로 내려간 자산을 피하는 것만으로 큰 하락장 손실이 크게 줄었어요. 수익을 '늘리는' 규칙이라기보다 <b>큰 손실(−29% 같은 것)을 피하는</b> 규칙. 기록이 200일보다 짧은 새 종목은 '부족'으로 나와요."],
+  r_pull:["🔁 ② 눌림목 (RSI(2))", "RSI(2) = 최근 2일 오른 폭과 내린 폭의 비율 (0~100). <b>10 아래면 아주 짧은 기간에 많이 빠진 상태</b>.<br><b>눌림목!</b> = 200일선 위(장기 상승) + RSI(2) 10 미만 → '좋은 종목이 잠깐 싸진 때'.<br>3일 % = 최근 3거래일 등락.", "근거: Connors의 RSI(2) 규칙 — 연구에서 승률이 약 71%로 높았지만 연 수익은 1.7%로 작았어요. 그래서 혼자 쓰는 규칙이 아니라 <b>'언제 살까' 타이밍</b>용. 오후 2:50~3:10에 하루 한 번 폰으로도 알려요."],
+  r_6m:["📈 ③ 6개월 추세", "지금 가격이 약 6개월(126거래일) 전보다 몇 % 올랐나/내렸나. 🔺 상승 · 🔻 하락.", "근거: 시계열 모멘텀(TSMOM, Moskowitz 등) — 최근 몇 달 오른 것은 조금 더 오르는 경향. 다만 <b>한국 시장은 이 효과가 약하다</b>는 연구가 많아서(김규영·안제욱 2013, Koh 2015), 고르는 기준이 아니라 <b>'6개월 내내 빠진 종목은 거르는' 기준</b>으로만 써요."],
+  r_sum:["→ 종합", "①②③을 묶은 한 줄.<br>• ⚠️ 200일선 아래 또는 6개월 약세 → <b>지금은 지켜보기 · 산다면 🧪 연습으로 먼저</b><br>• 🔁 눌림목 → 규칙상 살펴볼 만함<br>• 둘 다 ✅ → 추세 양호", "앱은 막지 않아요 — '이런 점이 해당돼요, 조심하세요'까지만. 판단은 내 몫. 💰 샀어요를 누를 때도 걸리는 게 있으면 한 번 더 알려 줘요."],
+  r_cand:["📐 후보 규칙 확인", "저녁 후보마다 ① 200일선 ③ 6개월 추세를 확인해요 (일봉을 하나씩 받아서 몇 초 걸려요).<br><b>→ 거르는 쪽</b>: 둘 중 하나라도 ⚠️/🔻 — 오늘 많이 빠진 게 '잠깐'이 아니라 '원래 약한' 종목일 수 있어요.<br><b>→ 추세 OK</b>: 장기 상승 중인 종목이 오늘 빠짐 → 종가베팅에 더 맞는 모양.", "근거: 200일선(Faber)·6개월 추세(TSMOM). 성적표가 쌓이면 '추세 OK 후보만 샀다면?'도 비교해 볼 수 있어요."],
+  c_rp_s0:["④ 0단계 신호별 성적", "그날 0단계(시장 점검)가 ✅ 평소대로 / ⚠️ 조심 / 🛑 쉬기였을 때, 후보들의 다음 날 시초가 성적을 따로 모아요.", "근거: 0단계 규칙이 정말 쓸모 있는지 <b>내 기록으로</b> 확인하려고. ✅ 날 승률이 ⚠️·🛑 날보다 확실히 높아야 0단계가 제 역할을 하는 거예요. 건수가 적을 땐(10건 미만) 참고만."],
+  buy_rule:["⑤ 어떤 규칙으로 샀나요?", "산 이유를 규칙으로 하나 골라요. 매매기록 성적표가 <b>📐 규칙별</b>로 나뉘어요.<br>• 🚦 추세: 200일선 위·6개월 상승이라서<br>• 🔁 눌림목: 오르는 종목이 잠깐 빠져서 (눌림목 신호가 있으면 자동으로 골라져 있어요)<br>• 🌙 종가베팅: 저녁 계기판 후보라서<br>• 🙂 감·그냥: 규칙 없이", "근거: McLean·Pontiff(2016) — 논문에 나온 규칙은 알려진 뒤 효과가 평균 56% 줄어요. 그래서 남의 숫자보다 <b>내가 직접 해 본 성적</b>이 중요해요. 🧪 연습으로 몇 주 돌려 보고, 성적 좋은 규칙만 실전에."],
+  j_rules:["📐 규칙별 성적", "매수 때 고른 규칙마다: 몇 번 · 승률 · 평균 수익률.", "몇 주 연습해 보고 승률·평균이 좋은 규칙만 실전에 쓰세요. 건수가 적을 땐(5건 미만) 우연일 수 있어요."],
   m_flow20:["📊 최근 20일 흐름", "코스피에서 외국인·기관이 <b>하루하루</b> 얼마나 사고팔았는지(순매수, 억 원) 막대로 보여 줘요. 왼쪽이 오래된 날, 오른쪽이 최근.<br>• 빨강 막대(위): 산 날 · 파랑 막대(아래): 판 날 · 막대에 손가락/마우스를 대면 날짜와 금액<br>• <b>20일 합계 · 최근 5일 합계 · 며칠 연속 매수/매도</b>", "패턴 보는 법: 외국인이 며칠 연속 사다가 파랑으로 돌아서는 날, 또는 오래 팔다가 빨강이 이어지기 시작하는 날을 눈여겨보세요. 다만 거래소 분류상 '외국인'에는 해외 펀드를 통한 한국인 자금(이른바 검은머리 외국인)도 섞여 있어서 구분은 안 돼요. 자료: KIS 일별 투자자 매매 · 장 마감 뒤(16시 이후) 오늘 값 추가."],
   m_ratio:["매수÷매도 비율 (몇 배)", "<b>산 금액 ÷ 판 금액</b>.<br><b>1배 = 산 돈과 판 돈이 똑같음</b> (저울이 딱 가운데).<br>• <b>1.33배</b>: 100억 팔 때 133억을 삼 → 사는 쪽<br>• <b>0.92배</b>: 100억 팔 때 92억만 삼 → 조금 파는 쪽<br>• <b>0.9배 이하</b>: 100억 팔 때 90억도 안 삼 → 확실히 파는 쪽<br><br>보는 기준: 1.0배 근처 = 큰 의미 없음 · 1.1배↑ 확실히 삼 · 1.2~1.3배↑ 강하게 삼 · 0.8배↓ 강하게 팖<br>색: 1.05배↑ 빨강 · 0.95배↓ 파랑", "순매수(억)는 '얼마나 많이'를, 비율은 '얼마나 한쪽으로 쏠렸나'를 보여 줘요. 거래가 많은 날은 순매수가 커도 비율은 1.1배일 수 있어요."],
   s0_flow:["오늘 수급 (코스피)", "외국인·기관의 오늘 <b>매수÷매도 비율</b> (아침 계기판 한국장 카드와 같은 자료, 장중 잠정치).<br><b>1배</b> = 산 돈과 판 돈이 같음 · 1보다 크면 사는 쪽 · 작으면 파는 쪽.<br><br><b>⚠️ 언제 세나</b>: 외국인과 기관이 <b>둘 다 0.9배 이하</b>(둘 다 확실히 파는 날)일 때만 위험 신호 <b>1개</b>로 더해요. 한쪽만 팔면 참고만.<br><br><b>0단계 위험 신호 세는 법</b><br>• 0개 → ✅ 평소대로<br>• 1~2개 → ⚠️ 조심 (작게 사거나 더 골라서)<br>• 3개 이상 (또는 코스피 −1.5% 이하) → 🛑 오늘은 쉬기", "근거: 한국장은 외국인·기관 큰손이 방향을 좌우하는 경우가 많아요. 둘이 같이 팔면 종가 근처까지 매물이 이어져 다음 날 시초가도 약하기 쉬워요. 예) 외국인 1.33배·기관 0.92배 → 외국인이 사고 있으니 위험 신호 아님."],
