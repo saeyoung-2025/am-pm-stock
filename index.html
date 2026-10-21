@@ -222,6 +222,17 @@
   .wl-item .hold b{font-family:Nunito,sans-serif;font-size:14px}
   .wl-item .hold .bar{flex-basis:100%;height:6px;border-radius:9px;background:linear-gradient(90deg,#e8eefc,#fdeceb);position:relative}
   .wl-item .hold .bar i{position:absolute;top:-3px;width:3px;height:12px;border-radius:2px;background:#333}
+  /* 손절~목표 막대 (크게·글자 붙임) */
+  .barbox{flex-basis:100%;display:flex;align-items:flex-start;gap:4px;background:#fff;border:1px solid #e6ebf4;border-radius:10px;padding:22px 12px 6px 6px;margin:4px 0}
+  .bar2{flex:1;position:relative}
+  .bar2 .trk{display:block;position:relative;height:10px;border-radius:99px;background:linear-gradient(90deg,#8fb0ec,#eef1f6 50%,#f0a59c)}
+  .bar2 .trk .zero{position:absolute;top:-3px;bottom:-3px;width:2px;margin-left:-1px;background:#9aa8c2;border-radius:1px}
+  .bar2 .trk i{position:absolute;top:-5px;width:6px;height:20px;margin-left:-3px;border-radius:3px;background:#1f3f7a;box-shadow:0 0 0 2px #fff}
+  .bar2 .trk i b{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);white-space:nowrap;font:800 11px/1 Nunito,sans-serif;padding:3px 6px;border-radius:6px;color:#fff;background:#1f3f7a}
+  .bar2 .trk i.up b{background:#e0504a} .bar2 .trk i.down b{background:#1f6fe0}
+  .bar2 .lbl{display:block;position:relative;height:14px;margin-top:4px;font-size:10.5px}
+  .bar2 .lbl small{position:absolute;top:0;white-space:nowrap} .bar2 .lbl small.down{left:0} .bar2 .lbl small.up{right:0}
+  .bar2 .lbl small.mid{transform:translateX(-50%);color:var(--faint)}
   .wl-item .hold.stop{background:#eaf1ff;outline:1.5px solid #8fb0ec} .wl-item .hold.take{background:#fff0ee;outline:1.5px solid #f0a59c}
   .tip{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;border-radius:50%;
        background:#e8eefc;color:#3b6fd1;font:700 10px/1 Nunito,sans-serif;font-style:normal;cursor:help;
@@ -469,6 +480,17 @@
   .rp-sub{margin:10px 0 2px;font-size:12px;font-weight:700;color:var(--sub)} .rp-row.sm{font-size:12.5px}
   .bf-rule button{font-size:12.5px}
   .jtabs .jt{font-size:12px;color:var(--sub);margin-right:2px} .jtabs span.rl{background:#eef6ff}
+  /* 🧭 알림 힌트 — 하늘색 (연두 = 검증 규칙과 구분) */
+  .hintbox{background:#eef6ff !important;border:1px solid #cfe2fb;border-left:4px solid #5b9be8;padding:12px 14px}
+  .hint-top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap} .hint-top b{font-size:15px;color:#1f4f8f} .hint-top small{font-size:11.5px;color:var(--faint)}
+  .hint-dx{margin:8px 0 6px;font-size:12px;color:#2c4f7c;background:#fff;border-radius:8px;padding:6px 9px;line-height:1.7}
+  .hint-dx span{background:#e2eefc;border-radius:6px;padding:1px 6px;font-weight:700}
+  .hint{background:#fff;border-radius:10px;margin-top:6px;border:1px solid #deebfb}
+  .hint summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px 10px;font-size:13.5px}
+  .hint summary::-webkit-details-marker{display:none}
+  .hint summary::after{content:"▾";margin-left:auto;color:var(--faint);font-size:12px} .hint[open] summary::after{content:"▴"}
+  .hint summary i{font-style:normal;font-size:16px} .hint summary b{color:#1f3f7a} .hint summary em{font-style:normal;font-size:11.5px;color:var(--sub)}
+  .hint ol{margin:0;padding:2px 14px 10px 32px;font-size:12.5px;line-height:1.75;color:#33476b}
   .kr-news{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);font-size:13px}
   .kr-news b{margin-right:4px}
   .kr-news a{padding:4px 11px;border-radius:99px;background:var(--chip);color:var(--accent);text-decoration:none;font-size:12px;font-weight:600}
@@ -600,6 +622,9 @@
       <div class="kinds" id="wlKinds"></div>
     </div>
     <div class="card wl-alert" id="phoneCard"></div>
+  </section>
+  <section>
+    <div class="card hintbox" id="alertHints"></div>
   </section>
 </div>
 
@@ -1604,6 +1629,9 @@ const HOLD_DEF = { stop: -7, take: 10 };
 /* 📌 업데이트 기록 — 새로 바꿀 때마다 맨 위에 추가 */
 const UPDATE_LOG = [
   { date:"2026.10.21", tab:"watch", items:[
+    ["🧭 알림 힌트 코너", "알림을 받아도 뭘 해야 할지 몰라서. 관심종목 탭 맨 아래(하늘색)에 알림 종류마다 '이 알림이 오면 이렇게' 순서를 정리. 누르면 펼쳐져요."],
+    ["🩺 빠질 때 알림에 '왜?' 첫 단서", "'확인해 보세요'만으론 뭘 볼지 막막해서. 손절·손절 절반·하락 알림에 오늘 코스피와 비교한 한 줄(시장 전체 탓 / 이 종목만 빠짐 / 비슷)을 붙이고, 누르면 그 종목 뉴스 화면이 열려요."],
+    ["손절~목표 막대 크게", "막대가 잘 안 보여서. 굵게·색 진하게, 지금 수익률 말풍선, 아래에 '손절 · 산 가격 · 목표' 글자."],
     ["📐 검증된 규칙 신호 ①②③", "자료 공부할 시간이 없어도 종목마다 규칙을 바로 보려고. 관심종목 카드에 🚦 200일선 위/아래, 🔁 눌림목(RSI(2)), 📈 6개월 추세와 '→ 종합' 한 줄. 각 ?에 근거 연구."],
     ["💰 살 때 한 번 더 알려 주기", "200일선 아래·6개월 약세 종목을 살 때 매수 창 위에 ⚠️ 안내 + '🧪 연습으로 바꾸기' 버튼 (막지는 않음)."],
     ["🔁 눌림목 알림", "좋은 종목이 잠깐 싸진 때를 놓치지 않게. 폰(오후 2:50~3:10 하루 한 번)·PC 알림에 눌림목 추가."],
@@ -1998,7 +2026,7 @@ function signals(w){
 }
 const TIP = {
   stop:"내가 정한 손절선까지 빠졌습니다. '지금 이 가격에 새로 사겠나?'를 자문해 보세요. 아니라면 정리할 때예요.",
-  warn:"손절선의 절반만큼 빠졌습니다. 아직 괜찮지만, 왜 빠지는지 뉴스·공시를 한 번 확인해 두세요.",
+  warn:"손절선의 절반만큼 빠졌습니다. 아직 괜찮지만 이유를 한 번 확인해 두세요. 폰 알림에는 🩺 '시장 전체 탓 / 이 종목만 빠짐 / 시장과 비슷' 한 줄이 붙고, 누르면 그 종목 뉴스가 열려요.",
   take:"목표 수익에 도달했습니다. 전부 팔거나, 절반만 팔아 수익을 지키는 방법도 있어요.",
   th:"내가 정한 기준(%)보다 많이 움직였다는 뜻입니다.",
   ma_break:"어제까지 한 달 평균(20일선) 위에 있다가 오늘 아래로 떨어졌습니다. 오르던 흐름이 꺾일 수 있다는 신호예요.",
@@ -2120,7 +2148,10 @@ function holdHTML(w, i){
   const sp = Math.round(w.buy * (1 + w.stop / 100)), tp = Math.round(w.buy * (1 + w.take / 100));
   const cls = my == null ? "" : my <= w.stop ? "stop" : my >= w.take ? "take" : "";
   // 손절선(왼쪽 끝) ~ 목표(오른쪽 끝) 사이 어디쯤인지
-  const posBar = my == null ? "" : `${tipHTML("bar")}<span class="bar" style="flex-basis:calc(100% - 24px)"><i style="left:calc(${Math.max(0, Math.min(100, (my - w.stop) / (w.take - w.stop) * 100))}% - 1px)"></i></span>`;
+  const posPct = v => Math.max(0, Math.min(100, (v - w.stop) / (w.take - w.stop) * 100));
+  const posBar = my == null ? "" : `<div class="barbox">${tipHTML("bar")}<div class="bar2">
+      <span class="trk"><em class="zero" style="left:${posPct(0)}%"></em><i class="${my >= 0 ? "up" : "down"}" style="left:${posPct(my)}%"><b>${pct(my)}</b></i></span>
+      <span class="lbl"><small class="down">손절 ${w.stop}%</small><small style="left:${posPct(0)}%" class="mid">산 가격</small><small class="up">목표 +${w.take}%</small></span></div></div>`;
   const st = stats(w.code);
   const sug = st && st.stopSuggest != null && st.stopSuggest !== w.stop ? `<span class="sug">${tipHTML("stopsug")}이 종목 권장 손절 ${st.stopSuggest}% (평소 하루 ${st.atrPct}% 움직임)</span>` : "";
   return `<div class="hold ${cls}">
@@ -2600,6 +2631,25 @@ document.getElementById("bfSave").addEventListener("click", () => {
   saveWatch(); renderWatch(); checkAlerts();
 });
 
+/* ── 🧭 알림 힌트: 이 알림이 오면 무엇을 하면 되는지 (누르면 펼침) ── */
+const ALERT_HINTS = [
+  ["🚨", "손절선 도달", "정리할지 결정할 때", ["알림의 <b>🩺 줄</b>부터 보기 — 시장 전체 탓인지, 이 종목만인지", "스스로 묻기: <b>'지금 이 가격에 새로 사겠나?'</b>", "아니라면 → 정리 (📒 매매기록에서 ✅ 팔았어요)", "그래도 갖고 간다면 → ✏️ 수정에서 손절선을 다시 정하고 이유를 한 줄 남기기"]],
+  ["⚠️", "손절 절반", "아직 괜찮아요 · 이유만 확인", ["<b>🩺 시장 전체 탓</b>이면 → 대개 시장 따라 돌아와요. 기다리기", "<b>🩺 이 종목만 빠짐</b>이면 → 알림을 눌러 뉴스 → 관심종목 펼쳐서 📋 공시", "🔴 유상증자·대주주 매도 같은 공시면 → 손절선까지 기다리지 말고 정리 고려", "이유를 모르겠으면 → 아무것도 안 해도 돼요. 손절선이 지켜 줘요"]],
+  ["🎯", "목표 도달", "수익 지키기", ["전부 팔기, 또는 <b>절반만</b> 팔기", "남긴 절반은 ✏️ 수정에서 손절선을 <b>0%(산 가격)</b> 근처로 올려 두면 '본전은 지키기'", "📒 매매기록에 판 소감 한 줄"]],
+  ["🔔", "하루 등락 기준", "크게 움직였다는 신호", ["<b>오를 때</b> → 따라 사지 않기 (추격 매수 조심). 보유 중이면 목표가 가까운지만 보기", "<b>내릴 때</b> → 🩺 줄 보기. 이 종목만 빠졌으면 뉴스·공시"]],
+  ["🔁", "눌림목", "규칙상 살펴볼 때 (매수 기회 후보)", ["연두 <b>📐 검증 규칙</b> 상자에서 200일선 위 ✅인지 다시 보기", "산다면 매수 창에서 규칙 <b>🔁 눌림목</b>, 처음엔 <b>🧪 연습</b>으로", "종가베팅 시간(15:20 전후)에 오는 알림이라 그날 저녁 계기판과 같이 보면 좋아요"]],
+  ["🌪", "시장 급락 · 공포지수", "시장 전체가 흔들림", ["오늘 <b>종가베팅은 쉬기</b> (저녁 계기판 0단계도 🛑로 나와요)", "보유 종목 손절선만 점검 — 시장 탓 하락은 종목을 팔 이유가 아닐 때가 많아요", "급하게 사지 않기"]],
+  ["📋", "중요 공시", "뉴스보다 먼저 나오는 소식", ["🔴 유상증자·감자·대주주 매도·관리종목 → 종가베팅 피하기, 보유 중이면 내용 확인", "🟡 임원 지분 변동·전환사채 → 지켜보기", "🟢 자사주 매입·배당 → 좋은 소식이지만 이미 가격에 반영됐을 수 있어요"]],
+  ["📬", "금요일 주간 리포트", "한 주 돌아보기", ["알림이 몇 번 왔는지, 성적표·매매일지 요약 보기", "다음 주 큰 미국 발표가 있으면 그 전날은 작게"]],
+];
+function renderHints(){
+  const el = document.getElementById("alertHints"); if (!el) return;
+  el.innerHTML = `<div class="hint-top"><b>${tipHTML("hints")}🧭 알림 힌트</b><small>이 알림이 오면 이렇게 — 누르면 펼쳐져요</small></div>
+    <p class="hint-dx">${tipHTML("dx")}<b>🩺 줄 읽는 법</b> — 빠지는 알림 끝에 붙어요: <span>시장 전체 탓</span> → 기다리기 · <span>이 종목만 빠짐</span> → 뉴스·공시 · <span>시장과 비슷</span> → 평소 흔들림</p>
+    ${ALERT_HINTS.map(([ic, name, gist, steps]) => `<details class="hint"><summary><i>${ic}</i><b>${name}</b><em>${gist}</em></summary><ol>${steps.map(t => `<li>${t}</li>`).join("")}</ol></details>`).join("")}`;
+}
+renderHints();
+
 /* ── 📱 휴대폰 알림 (앱을 닫아도) ── */
 let PUSH = null, pushTimer = null;
 async function pushSync(){
@@ -2663,6 +2713,8 @@ async function loadPhone(){
 
 /* ── ? 메모 (마우스를 올리거나 누르면 설명) ── */
 const TIPS = {
+  hints:["🧭 알림 힌트", "폰·PC로 오는 알림마다 <b>받았을 때 무엇을 하면 되는지</b> 순서대로 적어 둔 곳이에요. 한 줄 제목을 누르면 펼쳐져요.", "정답이 아니라 '처음엔 이렇게 해 보세요' 수준의 안내예요. 익숙해지면 내 방식으로 바꾸면 돼요."],
+  dx:["🩺 줄 (첫 단서)", "손절·손절 절반·하락 알림 끝에 붙는 한 줄. <b>오늘 코스피와 이 종목의 하루 등락</b>을 비교해요.<br>• 코스피 −1.5% 넘게 빠지고 종목도 비슷 → 시장 전체 탓<br>• 시장보다 3%p 넘게 더 빠짐 → 이 종목만 빠짐<br>• 그 외 → 시장과 비슷", "오늘 하루만 비교해요. 며칠에 걸쳐 빠진 거라면 이 줄만으로는 다 설명이 안 될 수 있어요. 빠지는 알림은 누르면 그 종목 뉴스 화면이 열려요."],
   r_200:["🚦 ① 200일선 (장기 추세)", "최근 200거래일(약 10개월) 종가의 평균. <b>지금 가격이 그 위면 ✅ 장기 상승, 아래면 ⚠️ 장기 추세가 꺾인 상태</b>.<br>%는 200일선에서 얼마나 떨어져 있는지.", "근거: Faber(2007) — 200일선(10개월선) 아래로 내려간 자산을 피하는 것만으로 큰 하락장 손실이 크게 줄었어요. 수익을 '늘리는' 규칙이라기보다 <b>큰 손실(−29% 같은 것)을 피하는</b> 규칙. 기록이 200일보다 짧은 새 종목은 '부족'으로 나와요."],
   r_pull:["🔁 ② 눌림목 (RSI(2))", "RSI(2) = 최근 2일 오른 폭과 내린 폭의 비율 (0~100). <b>10 아래면 아주 짧은 기간에 많이 빠진 상태</b>.<br><b>눌림목!</b> = 200일선 위(장기 상승) + RSI(2) 10 미만 → '좋은 종목이 잠깐 싸진 때'.<br>3일 % = 최근 3거래일 등락.", "근거: Connors의 RSI(2) 규칙 — 연구에서 승률이 약 71%로 높았지만 연 수익은 1.7%로 작았어요. 그래서 혼자 쓰는 규칙이 아니라 <b>'언제 살까' 타이밍</b>용. 오후 2:50~3:10에 하루 한 번 폰으로도 알려요."],
   r_6m:["📈 ③ 6개월 추세", "지금 가격이 약 6개월(126거래일) 전보다 몇 % 올랐나/내렸나. 🔺 상승 · 🔻 하락.", "근거: 시계열 모멘텀(TSMOM, Moskowitz 등) — 최근 몇 달 오른 것은 조금 더 오르는 경향. 다만 <b>한국 시장은 이 효과가 약하다</b>는 연구가 많아서(김규영·안제욱 2013, Koh 2015), 고르는 기준이 아니라 <b>'6개월 내내 빠진 종목은 거르는' 기준</b>으로만 써요."],
@@ -2801,7 +2853,7 @@ const TIPS = {
   stopsug:["권장 손절","하루 변동폭의 <b>2배</b> (최소 −3%, 최대 −15%). 평소 흔들림으로는 안 걸리고, 흐름이 정말 깨졌을 때만 걸리게 하는 기준이에요.","모든 종목에 −7%를 똑같이 쓰면 조용한 종목엔 너무 느슨하고, 출렁이는 종목엔 너무 빡빡해요."],
   buy:["내 매수가 · 수익률","1주 평균 단가와 지금 가격 기준 내 수익률.","여러 번 나눠 샀으면 평균 단가를 넣으세요 (증권사 앱 '평균단가')."],
   stoptake:["손절선 · 목표","손절선: 매수가에서 이만큼 빠지면 🚨 알림 (손절 = 손해를 작게 끊고 나오기).<br>목표: 이만큼 오르면 🎯 알림.","원칙: 손절 폭이 목표 폭보다 작게. 그래야 맞는 횟수가 절반이어도 전체로는 남아요. ✏️ 수정으로 바꿀 수 있어요."],
-  bar:["위치 막대","왼쪽 끝 = 손절선, 오른쪽 끝 = 목표. 검은 표시가 지금 가격이 어디쯤인지 보여 줘요.","왼쪽 끝에 붙어 있으면 손절선을 넘었다는 뜻."],
+  bar:["손절 ~ 목표 막대", "<b>왼쪽 끝 = 손절선, 오른쪽 끝 = 목표</b>. 진한 표시와 말풍선이 지금 내 수익률 위치예요.<br>가운데 회색 선 = 산 가격(0%). 오른쪽(빨강)으로 갈수록 목표에 가까워지고, 왼쪽(파랑)으로 갈수록 손절선에 가까워져요.", "끝에 닿으면 폰으로 🚨 손절 / 🎯 목표 알림이 와요."],
   why:["산 이유 메모","살 때 적은 한 줄. 팔 때 일지에 함께 남아요.","몇 달 뒤 '이런 이유로 산 건 잘 맞았다/틀렸다'를 돌아보는 재료가 됩니다."],
   xdel:["✕ 삭제","이 종목을 목록에서 지워요. 서버 알림 목록에서도 함께 빠져요.","산 종목이면 먼저 ✅ 팔았어요로 일지에 남긴 뒤 지우세요."],
   sw:["알림 켜기/끄기","이 종목의 모든 알림을 켜거나 끕니다.","실제 알림이 오려면 맨 아래 'PC 알림 켜기'도 눌러 둬야 해요."],
