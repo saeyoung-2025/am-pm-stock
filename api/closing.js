@@ -116,6 +116,34 @@ async function krxClose(code, auth) {
   return out;
 }
 
+// ── 🔁 눌림목 알림용: 어제까지 종가 약 210일 (최신 먼저) ──
+async function pastCloses(code, auth) {
+  const k = kstNow(); let out = [], end = k.ymd;
+  for (let i = 0; i < 3 && out.length < 210; i++) {
+    const st = new Date(Date.UTC(+end.slice(0,4), +end.slice(4,6) - 1, +end.slice(6)) - 140 * 86400e3 + 9 * 3600e3).toISOString().slice(0, 10).replace(/-/g, "");
+    const d = await kis("/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice", "FHKST03010100",
+      { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: code, FID_INPUT_DATE_1: st, FID_INPUT_DATE_2: end, FID_PERIOD_DIV_CODE: "D", FID_ORG_ADJ_PRC: "0" }, auth);
+    const got = (d.output2 || []).filter(x => x.stck_bsop_date && x.stck_bsop_date !== k.ymd && num(x.stck_clpr) && !out.some(o => o.d === x.stck_bsop_date)).map(x => ({ d: x.stck_bsop_date, c: num(x.stck_clpr) }));
+    if (!got.length) break;
+    out = out.concat(got).sort((a, b) => b.d.localeCompare(a.d));
+    const old = out[out.length - 1].d;
+    end = new Date(Date.UTC(+old.slice(0,4), +old.slice(4,6) - 1, +old.slice(6)) - 86400e3 + 9 * 3600e3).toISOString().slice(0, 10).replace(/-/g, "");
+    await sleep(120);
+  }
+  return out.map(o => o.c);
+}
+// 앱(index.html)의 ruleCalc와 같은 계산: 200일선 위 + RSI(2) 10 미만 = 눌림목
+function pullCheck(cl, cur) {
+  if (cl.length < 200 || !cur) return null;
+  const ma200 = cl.slice(0, 200).reduce((a, b) => a + b, 0) / 200;
+  const ser = [...cl.slice(0, 40)].reverse().concat([cur]);
+  let up = 0, dn = 0;
+  for (let i = 1; i < ser.length; i++) { const d = ser[i] - ser[i - 1], u = Math.max(d, 0), w = Math.max(-d, 0);
+    if (i <= 2) { up += u / 2; dn += w / 2; } else { up = (up + u) / 2; dn = (dn + w) / 2; } }
+  const rsi2 = dn === 0 ? 100 : Math.round(100 - 100 / (1 + up / dn));
+  return { pull: cur > ma200 && rsi2 < 10, rsi2, gap200: +(((cur / ma200) - 1) * 100).toFixed(1), d3: +(((cur / cl[2]) - 1) * 100).toFixed(1) };
+}
+
 // 여러 종목 종가를 3개씩 동시에 (처음 한 번만 느리고, 그다음은 Redis에서 바로)
 async function krxCloses(codes, auth) {
   const res = {}, q = [...codes];
@@ -203,7 +231,7 @@ async function weeklyReport() {
   const total = Object.values(c).reduce((a, b) => a + b, 0);
   let st = null; try { st = JSON.parse((await redis("GET", "amp:stats")) || "null"); } catch (e) {}
   const L = [];
-  const label = { stop: "🚨손절", warn: "⚠️손절절반", take: "🎯목표", th: "🔔등락", market: "🌪시장", dart: "📋공시" };
+  const label = { stop: "🚨손절", warn: "⚠️손절절반", take: "🎯목표", th: "🔔등락", market: "🌪시장", dart: "📋공시", rule: "🔁눌림목" };
   L.push(`🔔 알림 ${total}번${total ? " (" + Object.entries(c).map(([k, v]) => `${label[k] || k} ${v}`).join(" · ") + ")" : ""}`);
   if (st && st.record) {
     const r = st.record;
@@ -329,13 +357,24 @@ module.exports = async (req, res) => {
 
     // ⭐ 일봉 약 100일: /api/closing?daily=005930  (60일선·변동폭 계산용. 실패하면 30일짜리로)
     if (CODE_RE.test(qv("daily"))) {
-      let rows = [];
+      // 200일선·6개월 추세 계산용으로 약 250거래일 (한 번에 최대 100줄이라 최대 3번 나눠 받음)
+      let rows = [], short = false;
       try {
-        const d = await kis("/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice", "FHKST03010100",
-          { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: qv("daily"), FID_INPUT_DATE_1: from, FID_INPUT_DATE_2: today,
-            FID_PERIOD_DIV_CODE: "D", FID_ORG_ADJ_PRC: "0" }, auth);
-        rows = (d.output2 || []).filter(x => x.stck_bsop_date && num(x.stck_clpr)).map(x => ({ date: x.stck_bsop_date,
-          open: num(x.stck_oprc), high: num(x.stck_hgpr), low: num(x.stck_lwpr), close: num(x.stck_clpr), vol: num(x.acml_vol) }));
+        let end = today;
+        for (let k = 0; k < 3 && rows.length < 250; k++) {
+          const st = kstYmd(new Date(Date.UTC(+end.slice(0,4), +end.slice(4,6) - 1, +end.slice(6)) - 140 * 86400e3));
+          const d = await kis("/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice", "FHKST03010100",
+            { FID_COND_MRKT_DIV_CODE: "J", FID_INPUT_ISCD: qv("daily"), FID_INPUT_DATE_1: k === 0 ? from : st, FID_INPUT_DATE_2: end,
+              FID_PERIOD_DIV_CODE: "D", FID_ORG_ADJ_PRC: "0" }, auth);
+          const got = (d.output2 || []).filter(x => x.stck_bsop_date && num(x.stck_clpr) && !rows.some(r => r.date === x.stck_bsop_date)).map(x => ({ date: x.stck_bsop_date,
+            open: num(x.stck_oprc), high: num(x.stck_hgpr), low: num(x.stck_lwpr), close: num(x.stck_clpr), vol: num(x.acml_vol) }));
+          if (!got.length) { short = rows.length > 0; break; }
+          rows = rows.concat(got).sort((a, b) => b.date.localeCompare(a.date));
+          const oldest = rows[rows.length - 1].date;
+          end = kstYmd(new Date(Date.UTC(+oldest.slice(0,4), +oldest.slice(4,6) - 1, +oldest.slice(6)) - 86400e3));
+          if (k === 0 && got.length < 60) { short = true; break; }   // 상장한 지 얼마 안 된 종목
+          await sleep(120);
+        }
       } catch (e) {}
       if (rows.length < 30) {
         const d = await kis("/uapi/domestic-stock/v1/quotations/inquire-daily-price", "FHKST01010400",
@@ -344,7 +383,7 @@ module.exports = async (req, res) => {
           low: num(x.stck_lwpr), close: num(x.stck_clpr), vol: num(x.acml_vol) }));
       }
       rows.sort((a, b) => b.date.localeCompare(a.date));   // 최신 날짜가 맨 앞
-      return res.status(200).json({ status: "ok", rows });
+      return res.status(200).json({ status: "ok", rows, short });
     }
 
     // ⭐ 📱 휴대폰 알림 상태: /api/closing?push=status
@@ -417,6 +456,25 @@ module.exports = async (req, res) => {
           await ntfy(`${w.paper && kind !== "th" ? "🧪 연습 · " : ""}${w.name} · ${title}`, msg, { priority: w.paper && kind !== "th" ? Math.min(pr, 4) : pr, kind, click: `https://m.stock.naver.com/domestic/stock/${w.code}/total` });
           sent.push(`${w.name}:${kind}`);
         }
+      }
+      // 🔁 눌림목 알림: 하루 한 번, 14:50~15:09 (종가베팅 결정 전) — 200일선 위인데 최근 며칠 크게 빠진 관심종목
+      if (k.min >= 890 && k.min < 910) {
+        try {
+          if ((await redis("SET", `amp:pullcheck:${k.ymd}`, "1", "NX", "EX", 90000)) === "OK") {
+            for (const w of list.slice(0, 20)) {
+              const x = q[w.code]; if (!x || !x.price) continue;
+              try {
+                const r = pullCheck(await pastCloses(w.code, auth), x.price);
+                if (r && r.pull && (await redis("SET", `amp:sent:${k.ymd}:${w.code}:pull`, "1", "NX", "EX", 90000)) === "OK") {
+                  await ntfy(`${w.name} · 🔁 눌림목`, `지금 ${x.price.toLocaleString()}원 · 최근 3일 ${r.d3}% · RSI(2) ${r.rsi2}\n200일선 위(+${r.gap200}%)에서 짧게 많이 빠졌어요. 규칙상 살펴볼 때 — 산다면 '🔁 눌림목' 태그로 (처음엔 🧪 연습 추천).`,
+                    { priority: 4, kind: "rule", click: `https://m.stock.naver.com/domestic/stock/${w.code}/total` });
+                  sent.push(`${w.name}:pull`);
+                }
+              } catch (e) {}
+              await sleep(100);
+            }
+          }
+        } catch (e) {}
       }
       await redis("SET", "amp:lastrun", `${k.ymd.slice(4,6)}/${k.ymd.slice(6)} ${String(Math.floor(k.min / 60)).padStart(2,"0")}:${String(k.min % 60).padStart(2,"0")} · ${list.length}종목 확인 · 알림 ${sent.length + sentMk.length}건`);
       return res.status(200).json({ status: "ok", checked: list.length, sent: [...sentMk, ...sent] });
